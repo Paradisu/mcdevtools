@@ -63,6 +63,11 @@ public final class CaptureAgent {
 
             AgentBuilder builder = new AgentBuilder.Default()
                     .with(AgentBuilder.RedefinitionStrategy.DISABLED)
+                    .with(
+                            Boolean.getBoolean("mcdevtools.capture.debug")
+                                    ? AgentBuilder.Listener.StreamWriting.toSystemError()
+                                            .withTransformationsOnly()
+                                    : AgentBuilder.Listener.NoOp.INSTANCE)
                     .with(new AgentBuilder.Listener.Adapter() {
                         @Override
                         public void onError(

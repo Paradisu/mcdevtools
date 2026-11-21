@@ -115,11 +115,11 @@ async function launch(config: DevConfig, minecraft: string, instance: Instance, 
     `-Xms${instance.memory}`,
     `-Xmx${instance.memory}`,
     ...flags,
-    // The capture plugin does nothing without its control socket
+    // Capture does nothing without its control socket
     ...(withCapture
       ? [`-Dmcdevtools.capture.socket=${controlSocket(instance)}`, `-Dmcdevtools.capture.protocol=${hintsFile(minecraft)}`]
       : []),
-    // Platforms without a capture plugin get the capture Java agent; proxies also hook their outbound connections
+    // Everything with netty gets the capture Java agent (Limbo has a plugin instead); proxies also hook their outbound connections
     ...(withCapture && instance.def.capture === 'agent' ? agentFlags(instance) : []),
     // No X11 libraries in the image, and a forwarded DISPLAY (WSLg) would otherwise make AWT load them (BKCommonLib fails)
     '-Djava.awt.headless=true',
@@ -238,7 +238,7 @@ export async function start(config: DevConfig, names: string[], noBuild: boolean
     if (withCapture && javaBin !== 'java') {
       const major = javaMajor(javaBin);
       if (major !== undefined && major < CAPTURE_MIN_JAVA) {
-        warn(`${instance.name} runs on Java ${major}; the capture plugin needs Java ${CAPTURE_MIN_JAVA}, so it is not installed there`);
+        warn(`${instance.name} runs on Java ${major}; capture needs Java ${CAPTURE_MIN_JAVA}, so it is not set up there`);
         withCapture = false;
       }
     }
@@ -369,7 +369,7 @@ export async function build(config: DevConfig): Promise<void> {
     run(config.build.command[0]!, config.build.command.slice(1));
   }
   if (config.capture.enabled) {
-    log(dim('Building the capture plugin'));
+    log(dim('Building the capture tools'));
     gradle([':capture:jar', ':capture-agent:shadowJar']);
   }
 }

@@ -945,7 +945,7 @@ async function doctorCommand(ctx: Ctx, args: string[]): Promise<void> {
     log(keyValue(rows, { indent: 2 }));
   }
   if (probeFailed) {
-    log(dim('Fix: PipelineLayout.java (paper, velocity), CapturePaper.java / CaptureVelocity.java (hooks), CaptureLimbo.java (limbo)'));
+    log(dim('Fix: PipelineLayout.java (handler names), CaptureAgent.java (the netty hooks), CaptureLimbo.java (limbo)'));
   }
   if (failed) {
     fail('Some checks failed.');

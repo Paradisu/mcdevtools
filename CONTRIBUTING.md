@@ -14,7 +14,7 @@ The easiest place to work is the dev container image of this repository's users:
 
 ## Where things live
 
-See the layout in [docs/tool.md](docs/tool.md#layout). In short: `packages/cli` (the CLI), `packages/init` (`init`/`update`), `java/` (capture plugin, Liquibase runner), `devcontainer/`, `docs/`.
+See the layout in [docs/tool.md](docs/tool.md#layout). In short: `packages/cli` (the CLI), `packages/init` (`init`/`update`), `java/` (capture agent and Limbo plugin, Liquibase runner), `devcontainer/`, `docs/`.
 
 ## Principles
 

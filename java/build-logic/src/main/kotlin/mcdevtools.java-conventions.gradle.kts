@@ -14,15 +14,6 @@ repositories {
     // Every repository except Central is limited to the groups it serves, so Gradle never probes it for anything else.
     // A new dependency from one of these repositories may need its group added here.
     mavenCentral()
-    maven("https://repo.papermc.io/repository/maven-public/") {
-        content {
-            includeGroup("io.papermc.paper")
-            includeGroup("com.velocitypowered")
-            // Transitives of paper-api / velocity-api that Central does not carry
-            includeGroup("com.mojang")
-            includeGroup("net.md-5")
-        }
-    }
     // Limbo (the capture plugin compiles against it)
     maven("https://repo.loohpjames.com/repository") {
         content { includeGroup("com.loohp") }
@@ -72,7 +63,6 @@ val expandProperties: Map<String, String> = mapOf(
     "id" to providers.gradleProperty("id").get(),
     "name" to providers.gradleProperty("pluginName").get(),
     "version" to providers.gradleProperty("version").get(),
-    "paperApiVersion" to parseApiVersion(libs.versions.paper.api.get()),
     "description" to providers.gradleProperty("description").get(),
     "url" to providers.gradleProperty("url").get(),
     "authors" to providers.gradleProperty("authors").get()
@@ -81,16 +71,8 @@ val expandProperties: Map<String, String> = mapOf(
 tasks {
     processResources {
         val properties = expandProperties
-        filesMatching(listOf("plugin.yml", "velocity-plugin.json", "*.properties")) {
+        filesMatching(listOf("limbo.yml", "*.properties")) {
             expand(properties)
         }
     }
-}
-
-fun parseApiVersion(input: String): String {
-    val regex = Regex("""^(\d+\.\d+(\.\d+)?)""")
-    val matchResult = regex.find(input)
-    val version = matchResult?.groupValues?.get(1)
-
-    return version ?: "unknown"
 }

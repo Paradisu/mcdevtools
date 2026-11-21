@@ -47,7 +47,7 @@ export function dotDir(instance: Instance): string {
 
 /**
  * Unix socket paths are limited to ~107 bytes and checkouts can live deep, so sockets go under the temp dir.
- * `suffix` distinguishes other sockets of the same instance (the capture plugin's control socket).
+ * `suffix` distinguishes other sockets of the same instance (the capture control socket).
  */
 export function socketPath(instance: Instance, suffix = ''): string {
   const checkout = createHash('sha1').update(RUN).digest('hex').slice(0, 8);

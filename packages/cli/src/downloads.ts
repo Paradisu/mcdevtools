@@ -227,7 +227,7 @@ export async function setup(config: DevConfig, refresh: boolean): Promise<void> 
     fail(`${failures.length} plugin download(s) failed (the rest were downloaded)`);
   }
   if (config.capture.enabled) {
-    // The capture plugin follows connection states with ids from Mojang's packet report; never let this fail setup
+    // Capture follows connection states with ids from Mojang's packet report; never let this fail setup
     try {
       await ensureProtocol(config, refresh);
     } catch (error) {

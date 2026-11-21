@@ -96,7 +96,7 @@ const COMMANDS: Command[] = [
     options: [{ flag: '--out <file>', summary: 'Write the result to a file instead of printing it' }],
     run: (_ctx, args) => migrateConfigCommand(args),
   },
-  { name: 'build', usage: '', summary: 'Build the project and the capture plugin', run: ({ config }) => instances.build(config) },
+  { name: 'build', usage: '', summary: 'Build the project and the capture tools', run: ({ config }) => instances.build(config) },
   {
     name: 'start',
     usage: '[names...]',

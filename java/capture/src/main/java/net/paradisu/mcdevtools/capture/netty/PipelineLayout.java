@@ -58,9 +58,6 @@ public record PipelineLayout(
             List.of(),
             List.of());
 
-    /** Paper/Purpur: the vanilla layout. */
-    public static final PipelineLayout PAPER = VANILLA;
-
     /**
      * BungeeCord and Waterfall: {@code packet-decoder}/{@code packet-encoder}. Enabling compression inserts
      * {@code decompress}/{@code compress} right before them without an event.

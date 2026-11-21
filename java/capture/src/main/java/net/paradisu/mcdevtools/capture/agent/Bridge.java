@@ -57,7 +57,10 @@ public final class Bridge {
         }
     }
 
-    /** Runs when the channel is registered, after the platform's initializer has added the codecs. */
+    /**
+     * Added in front of the platform's initializer. Netty fires {@code channelRegistered} once the initializer has run
+     * (so the codecs exist) and before the channel reads anything, which is the moment to install the capture handlers.
+     */
     private static final class Deferred extends ChannelInboundHandlerAdapter {
         private final CaptureEngine engine;
         private final Leg leg;
@@ -68,9 +71,14 @@ public final class Bridge {
         }
 
         @Override
-        public void handlerAdded(ChannelHandlerContext ctx) {
+        public void channelRegistered(ChannelHandlerContext ctx) throws Exception {
             try {
                 PipelineLayout layout = NettyInjector.detect(ctx.pipeline());
+                if (Boolean.getBoolean("mcdevtools.capture.debug")) {
+                    engine.log()
+                            .info("debug: " + leg + " layout=" + (layout == null ? null : layout.name()) + " pipeline="
+                                    + ctx.pipeline().names());
+                }
                 if (layout != null) {
                     NettyInjector.inject(ctx.channel(), leg, layout, engine);
                 } else if (leg == Leg.FRONTEND && !warnedLayout) {
@@ -88,6 +96,7 @@ public final class Bridge {
                     // already removed
                 }
             }
+            ctx.fireChannelRegistered();
         }
     }
 }

@@ -12,8 +12,8 @@ mcdevtools: a local development network for Minecraft plugin projects. One CLI (
 | --- | --- |
 | `packages/cli` | The `mcdev` CLI (`@mcdevtools/cli`). Exports `./extension`, `./mc`, `./output`, `./prompt`, `./db`, `./util` for extensions; templates, scaffold, zellij config |
 | `packages/init` | `init` / `update` / wiring: plain JavaScript (JSDoc types), no dependencies |
-| `java/capture` | Packet capture plugin (one jar for Paper, Velocity and Limbo; `mcdevtools-capture.jar`) and the netty/core classes the agent reuses. No project dependencies |
-| `java/capture-agent` | Packet capture Java agent (`mcdevtools-capture-agent.jar`, Byte Buddy and Gson shaded) for platforms that have no capture plugin of their own (one agent instead of a plugin or mod per ecosystem) |
+| `java/capture` | The capture core, control socket and netty handlers (shared with the agent) and the Limbo capture plugin (`mcdevtools-capture.jar`). No project dependencies |
+| `java/capture-agent` | Packet capture Java agent (`mcdevtools-capture-agent.jar`, Byte Buddy and Gson shaded) for every platform except Limbo (one agent instead of a plugin or mod per ecosystem) |
 | `java/liquibase-runner` | Liquibase runner used by `mcdev db`; reads changelogs from a search path |
 | `java/build-logic` | Convention plugin `mcdevtools.java-conventions` |
 | `devcontainer` | Image Dockerfile, `mcdev` wrapper, adopter `template/` |
@@ -37,7 +37,7 @@ Nothing here may name a particular project. Project-specific behavior belongs in
 - **Never run** `mcdev ui`, `mcdev web start`, `mcdev console <name>` without `--send`, `mcdev logs ... -f` or `mcdev share start --foreground` from an agent: they take over the terminal or never exit. Use `mcdev logs <name>` and `mcdev console <name> --send "<command>"`.
 - Registries are filled through the extension API (`packages/cli/src/extension/`): platforms, plugin sources, exporters, share providers, template variables, migration providers, player resolvers, commands, help sections, hooks. Built-ins register through the same functions.
 - **Versioned formats** must keep reading older versions: the capture dump (`FORMAT` in `DumpWriter.java` and `packages/cli/src/capture/format.ts`, bumped on both sides), profiles (`FORMAT` in `profile.ts`; 1 is converted by `legacy-config.ts`) and the config (`format`; migrations in `packages/init/lib/migrations.mjs`). Profile imports treat the archive as untrusted: keep the validation and review screen.
-- **Capture** must never block or break a connection: keep `CaptureEngine.onFrame` allocation-light, non-blocking and catching everything. If a Minecraft/Paper/Velocity/Limbo/BungeeCord/ViaProxy/loader update breaks injection, fix `netty/PipelineLayout.java` (handler names), `CapturePaper.register()`, `CaptureVelocity.hook()`, `CaptureLimbo.onConnect()` (all reflective) or the agent's netty advice targets (`CaptureAgent`). The advice woven into netty must only use JDK types. Packet names come from Mojang's data generator: a Minecraft bump needs `mcdev capture protocol --refresh` and an instance restart, not Java changes.
+- **Capture** must never block or break a connection: keep `CaptureEngine.onFrame` allocation-light, non-blocking and catching everything. If a Minecraft/Paper/Velocity/Limbo/BungeeCord/ViaProxy/loader update breaks injection, fix `netty/PipelineLayout.java` (handler names), `CaptureLimbo.onConnect()` (Limbo has no netty) or the agent's netty advice targets (`CaptureAgent`). The advice woven into netty must only use JDK types, and the capture handler must be installed before the channel is registered with its worker thread (see `AcceptAdvice`). Packet names come from Mojang's data generator: a Minecraft bump needs `mcdev capture protocol --refresh` and an instance restart, not Java changes.
 - **Share providers** implement `ProviderFactory` (`share/provider.ts`), are registered in `share/providers/index.ts` and import their SDK lazily (optional dependency).
 - Java: Gradle (Kotlin DSL), version catalog in `java/gradle/libs.versions.toml` (no hard-coded versions in module build files), Palantir Java Format via Spotless (do not hand-format or add license headers), configuration cache enabled (read values with `providers.gradleProperty(...)`, never capture `project` in task actions). `./gradlew spotlessApply build` after editing Java.
 - Keep `PNPM_VERSION` in `devcontainer/Dockerfile` equal to `packageManager` in `package.json`.
@@ -45,8 +45,8 @@ Nothing here may name a particular project. Project-specific behavior belongs in
 ## Updating dependencies
 
 - Node: pin exact versions in `package.json` files; run `pnpm install` to refresh `pnpm-lock.yaml`.
-- Java: edit `java/gradle/libs.versions.toml` `[versions]` only. New Minecraft version: bump `paper-api` and `velocity-api` (and `limbo` when it publishes a matching build), then `mcdev setup --refresh`, `mcdev capture protocol --refresh` and `mcdev capture doctor` in a project.
-- Look versions up from the real source, do not guess: Maven Central `maven-metadata.xml`; `paper-api` / `velocity-api` at `https://repo.papermc.io/repository/maven-public/`; `limbo` from the `<version>` in `https://github.com/LOOHP/Limbo/blob/master/pom.xml` (check `.../Limbo/<version>/Limbo-<version>.pom` exists at `repo.loohpjames.com`).
+- Java: edit `java/gradle/libs.versions.toml` `[versions]` only. New Minecraft version: bump `limbo` when it publishes a matching build (the only Minecraft-versioned dependency), then `mcdev setup --refresh`, `mcdev capture protocol --refresh` and `mcdev capture doctor` in a project.
+- Look versions up from the real source, do not guess: Maven Central `maven-metadata.xml`; `limbo` from the `<version>` in `https://github.com/LOOHP/Limbo/blob/master/pom.xml` (check `.../Limbo/<version>/Limbo-<version>.pom` exists at `repo.loohpjames.com`).
 
 ## Documentation
 

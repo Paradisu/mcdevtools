@@ -34,7 +34,7 @@ Run `mcdev` for a menu, a group name (`mcdev db`, `mcdev capture`, `mcdev share`
 | --- | --- |
 | `mcdev bootstrap` | Build, download and seed (runs on container creation) |
 | `mcdev setup [--refresh]` | Resolve versions and download servers and plugins into `.mcdevtools/.cache`, and install the sdkman JDKs the instances name |
-| `mcdev build` | Run `[build].command`, and build the capture plugin when capture is enabled |
+| `mcdev build` | Run `[build].command`, and build the capture tools when capture is enabled |
 | `mcdev start [names] [--no-build] [--ui]` | Build, deploy to every instance, apply preset configs and run them under the console supervisor. Prints `Ready. Join at ...` when done |
 | `mcdev stop [names]` | Send the platform's stop command; the JVM is killed after 60 s |
 | `mcdev restart [names] [--no-build]` | Stop, rebuild and start |
@@ -91,7 +91,7 @@ The config is [`.mcdevtools/config.toml`](../packages/cli/scaffold/config.toml) 
 | `[[plugins]]` | Downloaded plugins: see below |
 | `[ui]`, `[web]` | zellij layout and session (the session defaults to the project folder's name); web console port and bind |
 | `[share]` | Tunnel provider, targets (default: every proxy and standalone instance), renewal, PROXY protocol |
-| `[capture]` | Packet capture plugin: `enabled`, `gzip_level`, `max_size`, `queue_capacity` |
+| `[capture]` | Packet capture: `enabled`, `gzip_level`, `max_size`, `queue_capacity` |
 
 ### Instances and networks
 

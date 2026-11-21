@@ -2,14 +2,14 @@ import { accessSync, constants, existsSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { ROOT, TOOL_ROOT, capture, log, run, warn } from './util.ts';
 
-/** mcdevtools' own Gradle build (capture plugin, Liquibase runner); the project builds it through `java/gradlew`. */
+/** mcdevtools' own Gradle build (capture agent and Limbo plugin, Liquibase runner); the project builds it through `java/gradlew`. */
 export const JAVA_BUILD = join(TOOL_ROOT, 'java');
 
 /** Name the capture jar gets in every instance's plugins/ (or mods/) folder */
 export const CAPTURE_JAR_NAME = 'mcdevtools-capture.jar';
 export const CAPTURE_JAR = join(JAVA_BUILD, 'capture', 'build', 'libs', CAPTURE_JAR_NAME);
 
-/** The capture Java agent (shaded), for platforms without a capture plugin */
+/** The capture Java agent (shaded), for everything with netty */
 export const CAPTURE_AGENT_JAR = join(JAVA_BUILD, 'capture-agent', 'build', 'libs', 'mcdevtools-capture-agent.jar');
 
 export const LIQUIBASE_RUNNER = join(JAVA_BUILD, 'liquibase-runner', 'build', 'install', 'liquibase-runner', 'bin', 'liquibase-runner');

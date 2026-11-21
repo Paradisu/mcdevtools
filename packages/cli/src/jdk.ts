@@ -114,7 +114,7 @@ export function javaMajor(bin: string): number | undefined {
   return majors.get(bin);
 }
 
-/** The capture plugin is built for Java 25: it cannot be loaded by an older JVM. */
+/** The capture agent and plugin are built for Java 25: an older JVM cannot load them. */
 export const CAPTURE_MIN_JAVA = 25;
 
 /** Installs every JDK the enabled instances name (what `mcdev setup` does, so `start` never waits for a download). */

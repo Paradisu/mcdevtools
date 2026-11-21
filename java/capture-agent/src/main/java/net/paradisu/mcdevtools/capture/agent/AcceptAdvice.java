@@ -22,13 +22,16 @@ import net.bytebuddy.asm.Advice;
 import java.util.function.Consumer;
 
 /**
- * Woven into {@code ServerBootstrapAcceptor.channelRead(ctx, msg)} after it added the child handler (the platform's
- * initializer): {@code msg} is the accepted child channel. Only JDK types, see {@link CaptureAgent}.
+ * Woven into the start of {@code ServerBootstrapAcceptor.channelRead(ctx, msg)}: {@code msg} is the accepted child
+ * channel. It runs before the method adds the platform's initializer and before it registers the channel with its
+ * worker thread, so the capture handler is in place before the worker can read a single byte (hooking after the method
+ * races the worker, which may already have run the initializer and read the first packets). Only JDK types, see
+ * {@link CaptureAgent}.
  */
 final class AcceptAdvice {
     private AcceptAdvice() {}
 
-    @Advice.OnMethodExit
+    @Advice.OnMethodEnter
     @SuppressWarnings("unchecked")
     static void exit(@Advice.Argument(1) Object msg) {
         try {

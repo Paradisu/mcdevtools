@@ -170,7 +170,7 @@ export interface ShareConfig {
 }
 
 export interface CaptureConfig {
-  /** Install the capture plugin (devtools/capture) on every instance */
+  /** Packet capture on every instance (Java agent; a plugin on Limbo) */
   enabled: boolean;
   /** Dump compression, 1 (fast) to 9 (small); runs on a background thread */
   gzip_level: number;

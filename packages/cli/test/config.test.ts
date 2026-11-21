@@ -250,7 +250,8 @@ test('ViaProxy arguments find their target and the modded platforms use mods/', 
   assert.equal(pluginsDirOf(platformOf('purpur')), 'plugins');
   assert.equal(platformOf('neoforge').capture, 'agent');
   assert.equal(capturableOf(platformOf('neoforge')), true);
-  assert.equal(platformOf('folia').capture, 'plugin');
+  assert.equal(platformOf('folia').capture, 'agent');
+  assert.equal(platformOf('limbo').capture, 'plugin');
   assert.equal(capturableOf(platformOf('limbo')), true);
   assert.equal(capturableOf(platformOf('folia')), true);
 });

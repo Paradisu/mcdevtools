@@ -72,8 +72,8 @@ export interface PlatformDef {
   /** Folder under the instance directory that holds plugin config folders (default: `pluginsDir`) */
   configDir?: string;
   /**
-   * How packet capture hooks in: `plugin` installs the capture plugin (Paper-family, Velocity, Limbo), `agent` starts
-   * the JVM with the capture Java agent (platforms without a capture plugin), `none` has no capture (default)
+   * How packet capture hooks in: `agent` starts the JVM with the capture Java agent (anything with netty),
+   * `plugin` installs the capture plugin (Limbo, which has no netty), `none` has no capture (default)
    */
   capture?: 'plugin' | 'agent' | 'none';
   /**
@@ -85,6 +85,6 @@ export interface PlatformDef {
   launch?(ctx: PrepareCtx): string[];
   /** Console command that re-reads the proxy's config (after a share tunnel changed its addresses) */
   reloadCommand?: string;
-  /** The project's own artifacts (build.artifacts) and the capture plugin are copied into it */
+  /** The project's own artifacts (build.artifacts) (and the Limbo capture plugin) are copied into it */
   installsProjectArtifacts: boolean;
 }

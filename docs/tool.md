@@ -16,7 +16,7 @@ bin/mcdev                 bash launcher (installs dependencies on first use, the
 packages/cli/             the mcdev CLI ("@mcdevtools/cli"); TypeScript run directly by Node 24
   src/  test/  templates/  scaffold/  zellij/  layouts/
 packages/init/            "npx github:Paradisu/mcdevtools init|update": plain JavaScript, no dependencies
-java/                     standalone Gradle build: capture plugin and agent, Liquibase runner (also an included build of projects)
+java/                     standalone Gradle build: capture agent and Limbo plugin, Liquibase runner (also an included build of projects)
 devcontainer/             the image Dockerfile, the mcdev wrapper, the adopter template
 docs/
 ```

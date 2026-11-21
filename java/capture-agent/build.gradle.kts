@@ -20,9 +20,9 @@ tasks {
         archiveFileName.set("mcdevtools-capture-agent.jar")
         relocate("net.bytebuddy", "net.paradisu.mcdevtools.shaded.bytebuddy")
         relocate("com.google.gson", "net.paradisu.mcdevtools.shaded.gson")
-        // Only what an agent needs: no Paper, Velocity or Limbo entry points or descriptors
-        exclude("net/paradisu/mcdevtools/capture/paper/**", "net/paradisu/mcdevtools/capture/velocity/**", "net/paradisu/mcdevtools/capture/limbo/**")
-        exclude("plugin.yml", "velocity-plugin.json", "limbo.yml", "META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA")
+        // Only what an agent needs: not the Limbo plugin entry point or its descriptor
+        exclude("net/paradisu/mcdevtools/capture/limbo/**")
+        exclude("limbo.yml", "META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA")
         manifest {
             attributes(
                 "Premain-Class" to "net.paradisu.mcdevtools.capture.agent.CaptureAgent",

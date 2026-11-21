@@ -36,7 +36,13 @@ final class Dispatch {
         call(channel, 1);
     }
 
+    private static final boolean DEBUG = Boolean.getBoolean("mcdevtools.capture.debug");
+
     private static void call(Object channel, int which) {
+        if (DEBUG) {
+            System.err.println("[McDevCapture] debug: " + (which == 0 ? "accepted" : "connected") + " "
+                    + channel.getClass().getName());
+        }
         try {
             ClassLoader nettyLoader = channel.getClass().getClassLoader();
             Method[] methods =

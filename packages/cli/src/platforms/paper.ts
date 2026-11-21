@@ -19,7 +19,7 @@ const BACKEND: Omit<PlatformDef, 'type' | 'label' | 'resolve' | 'cacheName'> = {
   hotswap: true,
   worlds: true,
   installsProjectArtifacts: true,
-  capture: 'plugin',
+  capture: 'agent',
   forwarding: ['modern', 'legacy', 'none'],
 };
 
@@ -41,7 +41,7 @@ function fillBackend(project: string, label: string): PlatformDef {
 /** Paper itself, at the newest build for the Minecraft version. `version` is a Minecraft version, `build` a Fill build id. */
 export const PAPER = fillBackend('paper', 'Paper');
 
-/** Folia (regionised multithreading). Plugins must declare `folia-supported: true`; the capture plugin does. */
+/** Folia (regionised multithreading). Plugins must declare `folia-supported: true`. */
 export const FOLIA = fillBackend('folia', 'Folia');
 
 /**
