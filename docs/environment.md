@@ -1,185 +1,221 @@
 # Development environment
 
-The devcontainer gives you a runnable network: a Velocity proxy, a Limbo waiting-room server and Paper (Purpur) backends running your working copy of the plugin, PostgreSQL 17 with sample data, and Redis for ConnectorPlugin. This page is the reference; the short version is in [CONTRIBUTING.md](../CONTRIBUTING.md#development-environment).
+`mcdev` runs a network from your working copy: proxies, backends and standalone servers, optionally with PostgreSQL and Redis. This page is the reference. Related pages: [extensions](extensions.md) · [platforms](platforms.md) · [sharing](sharing.md) · [packet capture](capture.md) · [working on the tool](tool.md).
 
 - [Getting started](#getting-started)
-- [The `dev` command](#the-dev-command)
+- [The `mcdev` command](#the-mcdev-command)
 - [Configuring the network](#configuring-the-network)
+- [Templates](#templates)
 - [Debugging and hot reload](#debugging-and-hot-reload)
 - [Consoles and logs](#consoles-and-logs)
 - [Database and migration testing](#database-and-migration-testing)
-- [Minecraft data: fixtures, lookup and decoding](#minecraft-data-fixtures-lookup-and-decoding)
+- [Minecraft data tools](#minecraft-data-tools)
 - [Troubleshooting](#troubleshooting)
 - [The published image](#the-published-image)
 
-Related pages: [sharing the network and setups](dev-sharing.md) · [packet capture](dev-capture.md) · [working on the `dev` tool](dev-tool.md).
-
 ## Getting started
 
-1. Open the repository in VS Code and choose **Reopen in Container**. Two configurations are offered: *Paradisu (prebuilt image)* pulls the image published by CI (fast, default); *Paradisu (build locally)* builds [.devcontainer/Dockerfile](../.devcontainer/Dockerfile), which you want when editing the image.
-2. Wait for `dev bootstrap` (it runs automatically as `postCreateCommand`) to build the jar, download the servers and plugins and seed the database. If it prints warnings (for example no network), fix the cause and run `dev bootstrap` again; it is safe to repeat.
-3. Run `dev start`, then join `localhost:25565`. Starting the network means you accept the [Minecraft EULA](https://aka.ms/MinecraftEULA) (`accept_eula = true` in [dev/dev.toml](../dev/dev.toml)). Online mode is on by default, so use a licensed account, or set `online_mode = false` in `dev/dev.local.toml` to let any username join. [dev.local.toml.example](../dev/dev.local.toml.example) lists the common overrides.
+1. In your project: `npx github:Paradisu/mcdevtools init` (see the [README](../README.md)). In a dev container (`--devcontainer` copies a ready-made configuration) `postCreateCommand` runs `mcdev bootstrap`, which builds the project, downloads the servers and, with `[db.migrations]`, seeds the database. It never fails container creation; fix the cause of any warning and run it again.
+2. Edit `.mcdevtools/config.toml`: `[build]` (your artifacts) and `[[instances]]`.
+3. `mcdev start`, then join `localhost:25565`. Starting servers means you accept the [Minecraft EULA](https://aka.ms/MinecraftEULA): set `accept_eula = true` in `.mcdevtools/config.local.toml` (gitignored; `config.local.toml.example` lists the common overrides). Online mode is on by default, so use a licensed account, or set `online_mode = false` to let any username join.
 
-Editor setup in the container:
-- The Red Hat Java and Gradle extensions are installed in their *pre-release* channel (`@prerelease` in `devcontainer.json`) because Lombok support needs it. Outside the container, switch to the pre-release versions yourself.
-- The PostgreSQL extension has two ready-made connections, `Paradisu Dev` and `LuckPerms Dev` ([.vscode/settings.json](../.vscode/settings.json)). They use "No Password" with SSL off: the dev database trusts the compose network (`.devcontainer/postgres/pg_hba.conf`, port not published). Delete duplicates you created earlier in your *User* settings.
+## The `mcdev` command
 
-## The `dev` command
+Run `mcdev` for a menu, a group name (`mcdev db`, `mcdev capture`, `mcdev share`, `mcdev mc`, `mcdev profile`, `mcdev web`) for that group's menu, `mcdev help` for all commands by section, `mcdev help <group|command>` (or `mcdev <command> --help`) for options. Extensions add commands and sections.
 
-Run `dev` for a menu, a group name (`dev db`, `dev capture`, `dev share`, `dev mc`, `dev profile`, `dev web`) for that group's menu, `dev help` for all commands by section, `dev help <group>` or `dev help <command>` (also `dev <command> --help`) for options.
-
-- **Prompting:** missing arguments are asked for on a terminal (instance, changelog, snapshot, player, capture, ...). With arguments, with `--no-input`, with `CI` set, with `PARADISU_DEV_NO_INPUT=1` or without a terminal, `dev` never prompts.
+- **Prompting:** missing arguments are asked for on a terminal. With arguments, with `--no-input`, with `CI` set, with `MCDEV_NO_INPUT=1` or without a terminal, `mcdev` never prompts.
 - **Destructive commands** (`db reset`, `db seed`, `db restore`, `capture rm`, `profile import`) take `--yes`; without a terminal and without it they refuse instead of waiting.
 - **Colors** switch off for pipes, `NO_COLOR` and `TERM=dumb`.
+- **Project:** `mcdev` finds the project from the working directory (the nearest `.mcdevtools/config.toml`); `MCDEV_PROJECT=<dir>` overrides it.
 
 ### Network
 
 | Command | What it does |
 | --- | --- |
-| `dev bootstrap` | Install, build, download and seed (runs on container creation) |
-| `dev setup [--refresh]` | Resolve versions and download Purpur, Velocity, Limbo and plugins into `dev/.cache` |
-| `dev build` | Build the plugin jar and the capture jar (`./gradlew -q shadowJar :devtools:capture:jar`) |
-| `dev start [names] [--no-build] [--ui]` | Build, deploy to every instance, apply preset configs and run them under the console supervisor. Prints `Ready. Join at ...` when done |
-| `dev stop [names]` | Send `stop`/`shutdown`; the JVM is killed after 60 s |
-| `dev restart [names] [--no-build]` | Stop, rebuild and start |
-| `dev status` | Running state, pids and ports |
-| `dev console <name> [--read-only] [--wait]` | Attach to a console; Ctrl-C detaches and the server keeps running |
-| `dev console <name> --send <line> [--timeout s]` | Run one console command without a terminal and print its output (default 3 s) |
-| `dev logs <name> [-f] [--console]` | The last lines of the server's log (`-f` follows; `--console`: the raw console output) |
-| `dev reset-world <name>` | Delete a stopped Paper server's worlds |
-| `dev clean [--all]` | Delete runtime data (`--all` also deletes `dev/.cache`) |
+| `mcdev bootstrap` | Build, download and seed (runs on container creation) |
+| `mcdev setup [--refresh]` | Resolve versions and download servers and plugins into `.mcdevtools/.cache` |
+| `mcdev build` | Run `[build].command`, and build the capture plugin when capture is enabled |
+| `mcdev start [names] [--no-build] [--ui]` | Build, deploy to every instance, apply preset configs and run them under the console supervisor. Prints `Ready. Join at ...` when done |
+| `mcdev stop [names]` | Send the platform's stop command; the JVM is killed after 60 s |
+| `mcdev restart [names] [--no-build]` | Stop, rebuild and start |
+| `mcdev status` | Instances with type, state, pids and ports, and the sharing state |
+| `mcdev console <name> [--read-only] [--wait]` | Attach to a console; Ctrl-C detaches and the server keeps running |
+| `mcdev console <name> --send <line> [--timeout s]` | Run one console command without a terminal and print its output (default 3 s) |
+| `mcdev logs <name> [-f] [--console]` | The last lines of the server's log (`-f` follows; `--console`: the raw console output) |
+| `mcdev reset-world <name>` | Delete a stopped instance's worlds (types that have worlds) |
+| `mcdev clean [--all]` | Delete `.mcdevtools/run` (`--all` also deletes `.mcdevtools/.cache`) |
+| `mcdev update [--ref r]` | Update mcdevtools itself |
+| `mcdev config migrate <file> [--out f]` | Convert a pre-mcdevtools `dev.toml` to the instances format |
 
 ### Consoles
 
 | Command | What it does |
 | --- | --- |
-| `dev ui [layout\|kill] [--background]` | Open the zellij workspace of live consoles |
-| `dev web start\|stop\|status` / `dev web token [--read-only]` | Serve that workspace to a browser ([details](dev-sharing.md#browser-access-to-the-consoles-dev-web)) |
+| `mcdev ui [layout\|kill] [--background]` | Open the zellij workspace of live consoles |
+| `mcdev web start\|stop\|status` / `mcdev web token [--read-only]` | Serve that workspace to a browser ([details](sharing.md#browser-access-to-the-consoles-mcdev-web)) |
 
-### Database
-
-| Command | What it does |
-| --- | --- |
-| `dev db reset [--through 00N] [--all] [--no-fixtures] [--yes]` | Rebuild the database up to a changelog with seed data and fixtures (`--all` also resets LuckPerms) |
-| `dev db seed [--yes]` | Reseed at the current changelog position |
-| `dev db snapshot <name>` / `dev db restore <name> [--yes]` | Save and restore the database |
-| `dev db fixtures [load\|list] [files] [--replace]` | Load Minecraft data fixtures (inventories) |
-| `dev db psql [args]` | Run psql against the dev database |
-
-### Minecraft data
+### Database (with `[db]`)
 
 | Command | What it does |
 | --- | --- |
-| `dev mc players [search] [--online]` | List players with their snapshot counts |
-| `dev mc inventory <player> [--context c] [--index n] [--all] [--format f]` | Show a stored inventory decoded |
-| `dev mc dump [--player p] [--context c] [--out file] [--raw]` | Write stored inventories as a fixture file |
-| `dev mc nbt <source> [--path p] [--format f] [--chunk x,z] [--compact]` | Decode NBT from a file, chunk, playerdata or level |
-| `dev mc item <data> [--format f] [--compact]` | Decode an item blob (base64, hex, `@file`, `-`) |
-| `dev mc encode <snbt> [--array] [--hex]` | Encode SNBT as an item blob |
-| `dev mc uuid <name\|uuid> [--offline]` | Convert UUID forms and look the player up |
-| `dev mc columns` | List the database columns that hold Minecraft blobs |
+| `mcdev db reset [--through id] [--all] [--no-fixtures] [--yes]` | Rebuild the database up to a changelog with seed data (`--all` also resets the other databases of `[db].databases`) |
+| `mcdev db seed [--yes]` | Reseed at the current changelog position |
+| `mcdev db snapshot <name>` / `mcdev db restore <name> [--yes]` | Save and restore the database |
+| `mcdev db psql [args]` | Run psql against the main database |
+
+`db reset` and `db seed` need `[db.migrations]`. `--no-fixtures` skips the `afterDbReset` hooks that extensions use to load data.
 
 ### Other groups
 
 | Command | See |
 | --- | --- |
-| `dev share start\|stop\|status\|logs\|providers` | [Sharing](dev-sharing.md#public-tunnels-dev-share) |
-| `dev capture start\|stop\|status\|watch\|list\|show\|packet\|export\|formats\|rm\|protocol\|doctor` | [Packet capture](dev-capture.md) |
-| `dev profile export\|import\|inspect\|list`, `dev override <instance> <path>` | [Profiles](dev-sharing.md#sharing-a-setup-profiles) |
+| `mcdev share start\|stop\|status\|logs\|providers` | [Sharing](sharing.md#public-tunnels-mcdev-share) |
+| `mcdev capture start\|stop\|status\|watch\|list\|show\|packet\|export\|formats\|rm\|protocol\|doctor` | [Packet capture](capture.md) |
+| `mcdev profile export\|import\|inspect\|list`, `mcdev override <instance> <path>` | [Profiles](sharing.md#sharing-a-setup-profiles) |
+| `mcdev mc nbt\|item\|encode\|uuid` | [Minecraft data tools](#minecraft-data-tools) |
 
 ## Configuring the network
 
-The network is defined in [dev/dev.toml](../dev/dev.toml). Override anything in the gitignored `dev/dev.local.toml`: tables merge, and `[[servers]]` / `[[plugins]]` entries merge by `name` / `key`. The Minecraft and Velocity versions default to `auto` and follow `gradle/libs.versions.toml`, so bumping `paper-api` updates the dev network too. Backends run Purpur (a Paper fork, as in production) at the newest build for that Minecraft version.
+The config is [`.mcdevtools/config.toml`](../packages/cli/scaffold/config.toml) (committed). Override anything in the gitignored `.mcdevtools/config.local.toml`: tables merge, and `[[instances]]`, `[[networks]]` and `[[plugins]]` entries merge by `name` / `key`, so a local file can flip `enabled` on one instance without restating it. Everything not set has a default; `format = 1` is the schema version that `mcdev update` migrates.
 
-| Table | Controls |
+| Key / table | Controls |
 | --- | --- |
-| `[jvm]` | `enhanced_redefinition`, `hotswap_agent`, `hotswap_plugins`, `extra_flags` |
-| `[proxy]`, `[limbo]` | Ports (proxy 25565, debug 5005; Limbo 30000, debug 5008) |
-| `[[servers]]` | Paper backends: `lobby` (30066, debug 5006) and `creative` (30067, debug 5007) are enabled by default |
-| `[[plugins]]` | Downloaded plugins (ConnectorPlugin, LimboTransfer, LuckPerms, FAWE, WorldGuard, BKCommonLib, TrainCarts, TC Coasters, CarbonChat) |
-| `[ui]`, `[web]` | zellij layout/session; web console port and bind |
-| `[share]` | Tunnel provider, targets, renewal, PROXY protocol |
+| `accept_eula`, `public_host`, `online_mode` | EULA acceptance; the address clients use to reach this machine (proxies transfer players through it); proxy online mode (backends trust the forwarded identity) |
+| `extensions` | Extension entry points: directories under `.mcdevtools/` (`"extensions/myproject"`) or packages resolvable from the project root. See [extensions](extensions.md) |
+| `[versions]` | `minecraft = "auto"` or a version. `auto` reads the Gradle version catalog named in `[versions.auto]` (`catalog = "gradle/libs.versions.toml"`, `minecraft_from = "paper-api"`, `velocity_from = "velocity-api"`), so bumping `paper-api` updates the dev network too. Without a catalog, set it explicitly |
+| `[build]` | `command = ["./gradlew", "-q", "shadowJar"]` run before every start; `[[build.artifacts]]` with `path` (relative to the project root) and `platforms` (plugin families `paper`, `velocity`, `limbo`): copied into matching instances on every start |
+| `[java]` | `enhanced_redefinition`, `hotswap_agent`, `hotswap_plugins`, `extra_flags` |
+| `[db]`, `[db.migrations]`, `[redis]` | See [Database](#database-and-migration-testing). Without `[db]` nothing database-related exists and `start` does not wait for PostgreSQL |
+| `[[networks]]` | `name`, `forwarding` (`auto` or `modern`), optional `online_mode` |
+| `[[instances]]` | One server process: see below |
+| `[[plugins]]` | Downloaded plugins: see below |
+| `[ui]`, `[web]` | zellij layout and session (the session defaults to the project folder's name); web console port and bind |
+| `[share]` | Tunnel provider, targets (default: every proxy and standalone instance), renewal, PROXY protocol |
 | `[capture]` | Packet capture plugin: `enabled`, `gzip_level`, `max_size`, `queue_capacity` |
 
-- **Add a backend server:** add a `[[servers]]` entry (unique ports) with `enabled = true` and, to attach the debugger, a matching configuration in `.vscode/launch.json`. Servers share the proxy, database and Redis; `context` sets the session, warp and inventory contexts.
-- **Add a plugin:** add a `[[plugins]]` entry with `source = "modrinth"` (and `slug`), `"url"`, `"jenkins"` (`job_url` of a Jenkins job; its latest successful build is used, `artifact_pattern` picks the jar), `"github"` (`repo = "owner/name"`; the latest release's jar, `asset_pattern` picks the asset; set `GITHUB_TOKEN` to avoid the anonymous API rate limit) or `"local"`. `platforms` may include `"limbo"` for plugins that run on the Limbo server. Modrinth plugins are resolved for the current game version; use `allow_prerelease` or `game_version_fallback` when only betas or older tags exist.
-- **Preset a plugin's config:** put files in `dev/templates/plugins/<key>/<paper|velocity>/`. They are copied into the plugin's data folder (`config_dir` in `dev.toml` when the folder name differs from the key) on every start, overwriting what is there. `${NAME}` placeholders are filled from [templates.ts](../dev/src/templates.ts). Generate the real defaults by running the plugin once, then trim them down.
-- **Limbo:** a standalone [Limbo](https://modrinth.com/mod/limbo-server) waiting-room server (`[limbo]` in `dev.toml`, enabled by default) runs next to the proxy with ConnectorPlugin and [LimboTransfer](https://github.com/Kas-tle/LimboTransfer). It is deliberately not in the proxy's server list: the Paradisu proxy config's `limbo-server` section points at it, so `/vparadisu maintenance` transfers players there. When the proxy starts, `LimboListener` has Limbo (addressed as `limbo` over ConnectorPlugin and Redis) run `transferall` back to `transfer-return-target`, so restarting the proxy with `dev restart proxy` returns players from Limbo. Limbo is built for one Minecraft version per release and starts first so it is subscribed before the proxy speaks. Set `limbo.enabled = false` if no Limbo build exists yet for the Minecraft version in use.
-- **World presets:** `world_preset` is `redstone_ready` (flat: bedrock, 3 stone, 116 sandstone), `void` or `default`.
+### Instances and networks
 
+An instance has a `name` (also its folder under `.mcdevtools/run/`), a `type` ([platform](platforms.md): `purpur`, `velocity`, `limbo`), `port`, `debug_port` (JDWP), `memory`, `enabled`, `first_start_commands`, and optionally:
 
-Notes:
-- ConnectorPlugin and TC Coasters are not on Modrinth; they are fetched from their CI servers. Plugins that depend on each other (TrainCarts needs BKCommonLib, TC Coasters needs both) must all be listed.
-- Newer Minecraft versions enable the whitelist by default (empty, so nobody can join); the `server.properties` template turns it off. Add `white-list=true` to a server's own template under `dev/templates/servers/<name>/` if you want to test it.
-- Each JVM runs under a small detached supervisor (`dev _supervise`, see below), not in a terminal: closing your terminal never stops a server, and `dev console` can be attached from any number of terminals.
-- Paper rewrites its generated config files, but `dev/templates` always wins on the next start. Edit the templates, not the files in `dev/run`.
+- `network = "<name>"`: part of that network. A proxy needs one; a backend in a network is listed in its proxy's server list (`try = true` puts it in the `try` order); an instance without a network is **standalone** (Limbo, or any server you want to start but not route to).
+- `version`, `build`: `"auto"` (the default) or an exact value to pin: a Minecraft version / build number for `purpur`, a Velocity version / build id for `velocity`, a Limbo build for `limbo`.
+- `public_port`: the port clients use when it differs from `port` (a remapped container port).
+- `world_preset` (backends): `redstone_ready` (flat: bedrock, 3 stone, 116 sandstone), `void` or `default`.
+- Any other key is kept for extensions (`instance.config.extra`), for example a project-specific `context`.
+
+At most one proxy per network and `forwarding = "modern"` are supported today (see [platforms](platforms.md)). Ports and names must be unique; `mcdev` validates this at startup and names the offending instance.
+
+### Plugins
+
+Add a `[[plugins]]` entry with `source`:
+
+- `"modrinth"` (and `slug`; resolved for the current game version; `allow_prerelease` or `game_version_fallback` help when only betas or older tags exist),
+- `"url"` (`url`, or `urls.<family>`),
+- `"jenkins"` (`job_url`; its latest successful build is used, `artifact_pattern` picks the jar),
+- `"github"` (`repo = "owner/name"`; the latest release's jar, `asset_pattern` picks the asset; set `GITHUB_TOKEN` to avoid the anonymous API rate limit),
+- `"local"` (`path` relative to the project root),
+- or a source an [extension](extensions.md) registered.
+
+`platforms` lists the plugin families the jar is installed on (`paper` for Bukkit-family backends, `velocity`, `limbo`). Plugins that depend on each other must all be listed. `config_dir` names the plugin's data folder per family when it differs from the key.
+
+## Templates
+
+Preset configs are rendered into each instance on every start, overwriting what is there, so Paper and the plugins can rewrite their files but the templates always win. Edit the templates, not the files in `.mcdevtools/run`.
+
+Layers, later ones win; each has the same layout:
+
+1. mcdevtools' own (`packages/cli/templates`): the base config of each family (`proxy/`, `paper-common/`, `limbo/`).
+2. The project's: `.mcdevtools/templates/` (committed).
+3. Personal overrides: `.mcdevtools/templates.local/` (gitignored; `mcdev override <instance> <path>` saves a changed runtime file there; profiles carry them).
+
+In each layer: `<base>/` (the instance's family base), `servers/<instance name>/` (one instance), and `plugins/<key>/<family>/` (copied into the plugin's data folder). Generate a plugin's real defaults by running it once, then trim them down.
+
+`${NAME}` placeholders are filled from the variables below plus anything extensions add with `registerTemplateVars`:
+
+| Variable | Value |
+| --- | --- |
+| `PROJECT_NAME` | The project folder's name |
+| `SERVER_NAME`, `SERVER_PORT`, `PUBLIC_HOST` | The instance's name and port; `public_host` |
+| `PROXY_PORT` | The instance's own port for a proxy; the network's proxy port for a backend |
+| `PUBLIC_HOST_<NAME>`, `PUBLIC_PORT_<NAME>` | Public address of every instance (name upper-cased, `-` as `_`); a live `mcdev share` tunnel replaces it |
+| `HAPROXY_PROTOCOL` | Whether this instance's tunnel sends PROXY protocol headers |
+| `ONLINE_MODE`, `FORWARDING_MODE`, `FORWARDING_SECRET`, `FORWARDING_SECRET_FILE` | From the instance's network; the secret is generated once per network in `.mcdevtools/run/networks/<name>/` |
+| `VELOCITY_SERVERS`, `VELOCITY_TRY` | The network's backends as Velocity `[servers]` lines and its `try` list |
+| `DB_HOST`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_URL`, `REDIS_HOST` | From `MCDEV_DB_*` / `MCDEV_REDIS_HOST` |
+| `LEVEL_TYPE`, `GENERATOR_SETTINGS` | From the instance's `world_preset` |
 
 ## Debugging and hot reload
 
-Use **Run and Debug**, then **Debug network** (starts the network and attaches to the proxy and lobby; **Debug all** adds the creative server). The image uses JetBrains Runtime with `-XX:+AllowEnhancedClassRedefinition` and `java.debug.settings.hotCodeReplace` is `auto`: edit a method and save, and VS Code pushes the recompiled class into the running server. Enhanced redefinition also allows adding and removing methods and fields. Resource changes (`messages_en.properties`, `plugin.yml`) need `dev restart <name>`, as does anything the debugger refuses to redefine. Set `hotswap_agent = true` to additionally enable HotswapAgent. [hotswap.ts](../dev/src/hotswap.ts) loads only the plugins the build needs (a dependency on `org.hibernate.orm` in `gradle/libs.versions.toml` enables HibernateJakarta, plus two JVM-level fixes) and none on Limbo; add more by name with `hotswap_plugins` in `[jvm]`. The attach configs in `.vscode/launch.json` need a `projectName` so the debugger knows which Gradle project to build on hot replace.
+Every instance listens for a debugger on its `debug_port`. Use **Run and Debug** in VS Code with an attach configuration per instance in `.vscode/launch.json` (give it a `projectName` so the debugger knows which Gradle project to build on hot replace). The image uses JetBrains Runtime with `-XX:+AllowEnhancedClassRedefinition` and `java.debug.settings.hotCodeReplace` is `auto`: edit a method and save, and VS Code pushes the recompiled class into the running server. Enhanced redefinition also allows adding and removing methods and fields. Resource changes need `mcdev restart <name>`, as does anything the debugger refuses to redefine.
 
-The attach configurations are `Attach: proxy` (5005), `Attach: lobby` (5006) and `Attach: creative` (5007). **Debug network** attaches to the proxy and lobby, **Debug all** adds creative; both first run the `dev: start` task, which finishes when `dev start` prints `Ready. Join at ...`.
+Set `hotswap_agent = true` under `[java]` to additionally enable HotswapAgent. [hotswap.ts](../packages/cli/src/hotswap.ts) loads only the plugins the build needs (a dependency on `org.hibernate.orm` in the Gradle version catalog enables HibernateJakarta, plus two JVM-level fixes) and none on platforms that run none of your code; add more by name with `hotswap_plugins`.
 
 ## Consoles and logs
 
-Every instance runs under a small detached supervisor (`dev _supervise <name>`, [supervisor.ts](../dev/src/supervisor.ts)) that owns the JVM's stdin/stdout, writes `dev/run/<name>/.dev/console.log` (the previous run is kept as `console.prev.log`; a crash leaves `exit.json` and `supervisor.log` next to it) and serves the console on a unix socket.
+Every instance runs under a small detached supervisor (`mcdev _supervise <name>`, [supervisor.ts](../packages/cli/src/supervisor.ts)) that owns the JVM's stdin/stdout, writes `.mcdevtools/run/<name>/.dev/console.log` (the previous run is kept as `console.prev.log`; a crash leaves `exit.json` and `supervisor.log` next to it) and serves the console on a unix socket.
 
-- `dev console <name>` attaches: it replays recent output, keeps a command history, and detaches on Ctrl-C or Ctrl-D without touching the server. Servers run with `-Dterminal.jline=false`, so there is no tab completion. `--read-only` only watches; `--wait` waits for the server and reconnects after a restart (what the zellij panes use).
-- `dev console <name> --send "<command>"` runs one command without a terminal, prints what the console wrote during `--timeout` seconds (default 3, ANSI colors stripped when piped) and exits. It fails if the instance is not running or exits meanwhile. Commands that need a player sender (most gameplay commands) cannot be run this way.
-- `dev logs <name>` prints the last 200 lines of `dev/run/<name>/logs/latest.log`; `--console` prints the supervisor's raw console log; `-f` follows (never exits).
+- `mcdev console <name>` attaches: it replays recent output, keeps a command history, and detaches on Ctrl-C or Ctrl-D without touching the server. Servers run with `-Dterminal.jline=false`, so there is no tab completion. `--read-only` only watches; `--wait` waits for the server and reconnects after a restart (what the zellij panes use).
+- `mcdev console <name> --send "<command>"` runs one command without a terminal, prints what the console wrote during `--timeout` seconds (default 3, ANSI colors stripped when piped) and exits. It fails if the instance is not running or exits meanwhile. Commands that need a player sender cannot be run this way.
+- `mcdev logs <name>` prints the last 200 lines of `.mcdevtools/run/<name>/logs/latest.log`; `--console` prints the supervisor's raw console log; `-f` follows (never exits).
 
-`dev ui` opens a [zellij](https://zellij.dev) workspace made only of console clients, so closing or killing it (`dev ui kill`) never affects the servers. The default layout `network` has a *consoles* tab (proxy and Limbo stacked, then one pane per enabled backend), a *db* tab (psql) and a *shell* tab; `tabs` has one tab per instance. Layouts are generated from the enabled instances. Add your own as `dev/layouts.local/<name>.kdl` (gitignored; [dev/layouts/backends.kdl](../dev/layouts/backends.kdl) is an example), then `dev ui <name>`. Inside zellij, `dev ui <layout>` adds the layout as a tab. Detach with Ctrl-o d; Ctrl-q closes the workspace (the servers keep running), which is why `.vscode/settings.json` stops VS Code from taking Ctrl+Q for itself in the terminal. Set `ui.default_layout` / `ui.session` in `dev.toml`.
+`mcdev ui` opens a [zellij](https://zellij.dev) workspace made only of console clients, so closing or killing it (`mcdev ui kill`) never affects the servers. The default layout `network` has a *consoles* tab (proxies and standalone servers stacked, then one pane per enabled backend), a *db* tab (psql, with `[db]`) and a *shell* tab; `tabs` has one tab per instance. Layouts are generated from the enabled instances. Add your own as `.mcdevtools/layouts/<name>.kdl` (committed) or `.mcdevtools/layouts.local/<name>.kdl` (gitignored), then `mcdev ui <name>`. Inside zellij, `mcdev ui <layout>` adds the layout as a tab. Detach with Ctrl-o d; Ctrl-q closes the workspace (the servers keep running). Set `ui.default_layout` / `ui.session` in the config.
 
 ## Database and migration testing
 
-Seed data lives in `dev/db/seed/<NNN>.sql`, one file per changelog, written against the schema as of that changelog (the deliberate NULLs in `002.sql` exist so that changelog 003 has something to backfill). `dev db reset` applies each changelog with Liquibase, loads its seed, and finally checks that no already-applied changeset would be re-run by the proxy.
+```toml
+[db]
+kind = "postgres"
+databases = ["app", "other"]   # the first is the main database; the rest are reset by `db reset --all` and dumped by profiles
+required = true                # `start` waits for it
 
-To test a new changelog against realistic data:
-1. `dev db reset --through <previous changelog>`
-2. `dev start`: the proxy applies the new changelog on startup, exactly as in production.
+[db.migrations]
+tool = "liquibase"             # built in; extensions can register others
+search_path = "src/main/resources"  # changelog paths resolve against this directory (relative to the project root)
+changelog = "db/migrations.xml"     # the master changelog, relative to search_path
+seed_dir = "db/seed"                # relative to .mcdevtools
 
-When you add a changelog that changes data shape, add `dev/db/seed/<NNN>.sql` for the new columns or tables. Personal rows (for example your own UUID) go in the gitignored `dev/db/seed/local.sql`. Minecraft binary data (inventories) is not in the SQL seeds; see *Minecraft data* below.
-
-```mermaid
-sequenceDiagram
-    participant Dev as dev db reset --through 002
-    participant LB as Liquibase
-    participant DB as PostgreSQL
-    participant P as Proxy (dev start)
-    Dev->>LB: apply 001
-    LB->>DB: schema 001
-    Dev->>DB: load seed/001.sql
-    Dev->>LB: apply 002
-    Dev->>DB: load seed/002.sql, fixtures
-    Dev->>LB: check no applied changeset would re-run
-    P->>LB: startup applies 003
-    LB->>DB: schema 003 on seeded data
+[redis]
+enabled = true
 ```
 
-## Minecraft data: fixtures, lookup and decoding
+Connection settings come from `MCDEV_DB_HOST` / `_PORT` / `_NAME` / `_USER` / `_PASSWORD` and `MCDEV_REDIS_HOST` (defaults: `localhost`, `5432`, and the main database's name for name, user and password). The dev container's compose file sets them for its `postgres` and `redis` services.
 
-Paper stores items as NBT blobs: one item is the gzip of a named-root compound (`id`, `count`, `components`, `DataVersion`); an item array is a version byte (1), an int count, then a length-prefixed item per slot. The player inventory uses 41 slots (36 storage, 4 armor, 1 offhand), armor 4, the ender chest 27. The codecs ([dev/src/mc/](../dev/src/mc)) are covered by tests and follow `ItemStack#serializeAsBytes` / `#serializeItemsAsBytes` in paper-api.
+Seed data lives in `<seed_dir>/<id>.sql`, one file per changelog (the file name without its extension), written against the schema as of that changelog. `mcdev db reset` applies each changelog with the migration tool, loads its seed, then `local.sql` if present (personal rows, gitignored by convention), runs the `afterDbReset` hooks and finally checks that no already-applied changeset would be re-run.
 
-- **Fixtures** (`dev/db/fixtures/*.toml`, private ones in the gitignored `dev/db/fixtures.local/`) describe inventories in SNBT, the syntax of `/give` (`{id:"minecraft:diamond_sword",count:1,components:{…}}`). `dev db reset` loads them after the SQL seeds (`--no-fixtures` skips them; `requires_changelog` skips a file when the reset stops before that changelog). Rows get deterministic ids, so `dev db fixtures load [files] [--replace]` can be repeated. The committed [inventories.toml](../dev/db/fixtures/inventories.toml) documents the format; players are named by seed name, uuid or `offline:Name` (the UUID an `online_mode = false` server gives that name; it creates the player row). Items are stamped with the DataVersion of the downloaded server jar (`data_version` in `dev.local.toml` overrides it); older stamps are upgraded by the server's data fixers.
-- **Capture and reload:** play on the dev server, then `dev mc dump [--player p] [--raw]` writes the stored inventories as a fixture file you can load again (`--raw` keeps the exact bytes). `dev mc inventory <player> [--context c] [--all] [--format table|snbt|json|fixture|raw]` shows one decoded; `dev mc players [search]` lists players with their snapshot counts.
-- **Decoding:** `dev mc nbt <file|->` decodes gzip/zlib/plain NBT, `.mca` chunks (`--chunk x,z`) and has shortcuts `playerdata:<player>@<server>` and `level:<server>` (`--path Data.LevelName`, `--format json` for jq). `dev mc item <base64|hex|@file|->` decodes a blob copied from the database (a single item or an array); `dev mc encode '<snbt>' [--array]` produces one. `dev mc uuid <name|uuid|[I;…]>` converts UUID forms (dashed, undashed, int array, most/least), computes the offline-mode UUID and looks the player up in the dev database and at Mojang (`--offline` skips the network).
-- A new Minecraft blob column needs an entry in [columns.ts](../dev/src/mc/columns.ts); a new inventory-like table needs its own fixture section in `fixtures.ts`.
+To test a new changelog against realistic data:
+
+1. `mcdev db reset --through <previous changelog>`
+2. `mcdev start`: your application applies the new changelog on startup, as in production.
+
+When you add a changelog that changes data shape, add `<seed_dir>/<id>.sql` for the new columns or tables.
+
+The built-in `liquibase` tool is the runner in [`java/liquibase-runner`](../java/liquibase-runner): it reads changelogs from `search_path` (not from your project's classpath) and needs no dependency on your build. The first `db reset` builds it with Gradle.
+
+## Minecraft data tools
+
+`mcdev mc` decodes Minecraft's binary formats; the part that reads a project's own database schema is added by that project's extension.
+
+- `mcdev mc nbt <file|->` decodes gzip/zlib/plain NBT, `.mca` chunks (`--chunk x,z`) and has shortcuts `playerdata:<player>@<server>` and `level:<server>` (`--path Data.LevelName`, `--format json` for jq). Player names resolve through the project's player resolver (an extension can register one); without one, use a UUID or `offline:<name>`.
+- `mcdev mc item <base64|hex|@file|->` decodes an item blob (a single item or an array, as Paper's `ItemStack#serializeAsBytes` / `#serializeItemsAsBytes` write them); `mcdev mc encode '<snbt>' [--array]` produces one. Items are stamped with the DataVersion of the downloaded server jar (`data_version` in the config overrides it).
+- `mcdev mc uuid <name|uuid|[I;…]>` converts UUID forms (dashed, undashed, int array, most/least), computes the offline-mode UUID and looks the player up at Mojang (`--offline` skips the network).
+
+The codecs ([packages/cli/src/mc](../packages/cli/src/mc)) are covered by tests. Extensions import them from `@mcdevtools/cli/mc`.
 
 ## Troubleshooting
 
-- **"additional privileges requested" in the Dev Containers log:** newer Docker Compose builds through bake, which refuses the Dockerfile the devcontainer CLI generates in `/tmp`. The *build locally* configuration avoids this by building the image itself (`initializeCommand`), and the prebuilt one never builds. If you add a `build:` section to a compose service yourself, set `BUILDX_BAKE_ENTITLEMENTS_FS=0` (or `COMPOSE_BAKE=false`) in the environment VS Code was started from.
-- **Gradle hangs for two minutes and fails with "The settings are not yet available":** another Gradle process was holding lock files in a shared `.gradle` directory and could not be asked to release them from inside the container. The compose file now mounts container-only volumes over `.gradle` and `build-logic/.gradle` (`gradle-project`, `gradle-build-logic`), so a Gradle daemon or Java extension on the host no longer interferes. If you ever see it again, something else is sharing the checkout; run `docker volume rm paradisu-dev_gradle-project paradisu-dev_gradle-build-logic` (with the container stopped) to reset the container's caches.
-- **Gradle fails with "Cannot create directory '/workspaces/ParadisuPlugin/.gradle/…'":** the container user's UID was changed to match yours (the Dev Containers tooling does this when your UID is not 1000, as on GitHub runners) but the Gradle volume belongs to another user. New volumes are created world-writable and `dev bootstrap` repairs old ones (it needs `sudo`, which the image allows); to start over, remove `paradisu-dev_gradle-project` and `paradisu-dev_gradle-build-logic` with the container stopped.
-- **"Supplied javaHome is not a valid folder: /home/<you>/.sdkman/…" (or other host paths) in the container:** the host and the container share the checkout, and a Java extension on the host wrote `.project`, `.classpath` and `.settings/` (including `org.eclipse.buildship.core.prefs` with your host `java.home`) into it; the container's Gradle import then hands that path to Gradle. `.vscode/settings.json` sets `java.import.generatesMetadataFilesAtProjectRoot` to `false` (window scope, so it overrides a `true` in your host user or machine settings), which stops both sides writing them. If they already exist, delete them (they are gitignored) with `rm -rf .project .classpath .settings */.project */.classpath */.settings`, then run **Java: Clean Java Language Server Workspace** in the container window (the language server caches the imported projects) and reload it.
-- **A plugin fails with `UnsatisfiedLinkError … libX11.so.6`:** the image has no X11 libraries and a `DISPLAY` forwarded into the container (WSLg) makes the JDK try the X11 toolkit. The dev tool starts every server with `-Djava.awt.headless=true`; if you start one by hand, add it too.
-- **Image build fails with `/tmp/gw/gradlew: not found` (exit code 127), or `dev`/`gradlew` say `bad interpreter` / `not found`, on Windows:** Git converted the shell scripts to CRLF line endings (`core.autocrlf=true`), so Linux looks for an interpreter named `/bin/sh\r`. [.gitattributes](../.gitattributes) now forces LF, and the Dockerfile strips the CR from `gradlew` itself, but an existing checkout keeps its CRLF files. Fix it once: commit or stash your changes, then `git rm --cached -r . && git reset --hard` (or clone again), and reopen the container. Clone into the WSL filesystem instead of `C:` if you want fast file access in the container.
-- **`dev bootstrap` printed warnings:** it never fails container creation. Fix the cause (usually no network) and run it again; it is safe to repeat.
-- **A server does not stop:** `dev stop` sends `stop`/`shutdown` to the console and kills the JVM after 60 seconds. Look at `dev console <name>` or `dev logs <name> --console` for what it is waiting on.
-- **`dev status` says stopped but a java process is running:** the supervisor died (its crash output is in `dev/run/<name>/.dev/supervisor.log`). Kill the java process and start again. Stale pid files after a container restart are detected and cleaned automatically.
-- **zellij says the socket path is too long:** set `ZELLIJ_SOCKET_DIR` to a short directory such as `/tmp/zj` (only happens with a very long `TMPDIR`).
-- **Capture misbehaves:** run `dev capture doctor` ([details](dev-capture.md#troubleshooting)).
-- **Sharing problems:** see [dev-sharing.md](dev-sharing.md).
+- **"additional privileges requested" in the Dev Containers log:** newer Docker Compose builds through bake, which refuses the Dockerfile the devcontainer CLI generates in `/tmp`. Build the image yourself (`docker build -f dev/devcontainer/Dockerfile -t mcdevtools-devcontainer:local dev`) and run it with an image-only compose service. If you add a `build:` section to a compose service, set `BUILDX_BAKE_ENTITLEMENTS_FS=0` (or `COMPOSE_BAKE=false`) in the environment VS Code was started from.
+- **Gradle hangs for two minutes and fails with "The settings are not yet available":** another Gradle process was holding lock files in a shared `.gradle` directory. The compose template mounts container-only volumes over `.gradle`, so a Gradle daemon or Java extension on the host no longer interferes.
+- **Gradle fails with "Cannot create directory '…/.gradle/…'":** the container user's UID was changed to match yours (as on GitHub runners) or Docker created the volume as root, so it is not writable. `mcdev bootstrap` and every Gradle run `mcdev` makes repair the known `.gradle` directories (`<project>/.gradle`, `build-logic/.gradle`, and the same two under `dev/java`) with `sudo chown`. To start over, remove the volumes with the container stopped.
+- **"Supplied javaHome is not a valid folder: /home/<you>/.sdkman/…" in the container:** a Java extension on the host wrote `.project`, `.classpath` and `.settings/` (with your host `java.home`) into the shared checkout. Set `java.import.generatesMetadataFilesAtProjectRoot` to `false` (the template does), delete the files, run **Java: Clean Java Language Server Workspace** in the container and reload.
+- **A plugin fails with `UnsatisfiedLinkError … libX11.so.6`:** the image has no X11 libraries and a `DISPLAY` forwarded into the container (WSLg) makes the JDK try the X11 toolkit. `mcdev` starts every server with `-Djava.awt.headless=true`; if you start one by hand, add it too.
+- **`mcdev`/`gradlew` say `bad interpreter` / `not found` on Windows:** Git converted the shell scripts to CRLF. Force LF for `*.sh`, `gradlew` and `bin/mcdev` in the project's `.gitattributes` (mcdevtools' own does), then re-checkout. Clone into the WSL filesystem for fast file access in the container.
+- **`mcdev bootstrap` printed warnings:** it never fails container creation. Fix the cause (usually no network) and run it again; it is safe to repeat.
+- **A server does not stop:** `mcdev stop` sends the stop command and kills the JVM after 60 seconds. Look at `mcdev console <name>` or `mcdev logs <name> --console` for what it is waiting on.
+- **`mcdev status` says stopped but a java process is running:** the supervisor died (its crash output is in `.mcdevtools/run/<name>/.dev/supervisor.log`). Kill the java process and start again. Stale pid files after a container restart are cleaned automatically.
+- **zellij says the socket path is too long:** set `ZELLIJ_SOCKET_DIR` to a short directory such as `/tmp/zj`.
+- **"No .mcdevtools/config.toml":** you are outside the project, or it is not set up: `npx github:Paradisu/mcdevtools init`.
+- **Capture misbehaves:** run `mcdev capture doctor` ([details](capture.md#troubleshooting)). **Sharing problems:** see [sharing.md](sharing.md).
 
 ## The published image
 
-[.github/workflows/devcontainer.yml](../.github/workflows/devcontainer.yml) builds the image for amd64 and arm64, smoke-tests it, and publishes it to `ghcr.io/paradisu/paradisuplugin-devcontainer` (`latest` from the default branch, branch and commit tags, and a weekly rebuild for Debian updates). A second job builds the image from the current Dockerfile, starts the whole environment and checks bootstrap, seeding and a partial migration reset. To test an image change before it is merged, set `PARADISU_DEVCONTAINER_TAG=<branch>` in `.devcontainer/.env`. Pinned versions (JetBrains Runtime, Node, pnpm) are `ARG`s at the top of the Dockerfile; keep `PNPM_VERSION` equal to `packageManager` in `dev/package.json`.
+[`.github/workflows/devcontainer.yml`](../.github/workflows/devcontainer.yml) builds the image for amd64 and arm64, smoke-tests it, and publishes it to `ghcr.io/paradisu/mcdevtools-devcontainer` (`latest` from the default branch, branch and commit tags, and a weekly rebuild for Debian updates). Besides JetBrains Runtime 25, Node, pnpm, zellij, `psql` and the GitHub CLI it has [sdkman](https://sdkman.io) (`SDKMAN_DIR=/usr/local/sdkman`) for servers that need another JDK: JetBrains Runtime stays the default Java. The `mcdev` wrapper in the image finds the project and runs the checkout's own launcher, so every project uses the mcdevtools version it pinned. To test an image change before it is merged, set `MCDEVTOOLS_DEVCONTAINER_TAG=<branch>` in `.devcontainer/.env`. Pinned versions (JetBrains Runtime, Node, pnpm) are `ARG`s at the top of the [Dockerfile](../devcontainer/Dockerfile); keep `PNPM_VERSION` equal to `packageManager` in `package.json`.

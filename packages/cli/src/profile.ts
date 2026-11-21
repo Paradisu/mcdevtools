@@ -4,7 +4,7 @@ import { parse, stringify } from 'smol-toml';
 import { parseArgs } from 'node:util';
 import type { Command, Ctx } from './command.ts';
 import { type DevConfig, type PluginConfig, type Platform, loadConfig } from './config.ts';
-import { dbReachable, dumpDatabase, restoreDump } from './db.ts';
+import { dbReachable, dumpDatabase, pgEnv, restoreDump } from './db.ts';
 import { changelogId, migrationsOf } from './db-migrations.ts';
 import { readResolved, setup } from './downloads.ts';
 import { bold, formatBytes, keyValue, next, relPath, status as statusWord, table } from './output.ts';
@@ -200,7 +200,7 @@ export async function exportProfile(config: DevConfig, options: ExportOptions): 
     const databases: string[] = [];
     for (const database of config.db?.databases ?? []) {
       // Secondary databases are created by the devcontainer; skip the ones this machine lacks
-      if (databases.length > 0 && capture('psql', ['-X', '-tAc', `select 1 from pg_database where datname = '${database}'`], { env: { PGDATABASE: 'postgres' } }).stdout.trim() !== '1') continue;
+      if (databases.length > 0 && capture('psql', ['-X', '-tAc', `select 1 from pg_database where datname = '${database}'`], { env: pgEnv('postgres') }).stdout.trim() !== '1') continue;
       dumpDatabase(join(stage, 'db', `${database}.dump`), database);
       databases.push(database);
     }
