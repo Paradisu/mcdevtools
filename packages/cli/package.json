@@ -1,11 +1,19 @@
 {
-  "name": "paradisu-dev",
-  "private": true,
+  "name": "@mcdevtools/cli",
+  "version": "0.1.0",
+  "description": "The mcdev CLI: dev network, packet capture, sharing and the extension API",
+  "license": "AGPL-3.0-only",
   "type": "module",
-  "description": "Local Velocity + Paper development network for ParadisuPlugin",
-  "packageManager": "pnpm@12.11.2",
   "engines": {
     "node": ">=24"
+  },
+  "exports": {
+    "./extension": "./src/extension/index.ts",
+    "./mc": "./src/mc/index.ts",
+    "./output": "./src/output.ts",
+    "./prompt": "./src/prompt.ts",
+    "./db": "./src/db.ts",
+    "./tsconfig.base.json": "../../tsconfig.base.json"
   },
   "scripts": {
     "dev": "node src/cli.ts",

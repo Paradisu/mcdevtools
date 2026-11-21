@@ -1,0 +1,18 @@
+{
+  "name": "mcdevtools",
+  "version": "0.1.0",
+  "description": "Local development network, packet capture and extensible tooling for Minecraft plugin projects",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "packageManager": "pnpm@12.11.2",
+  "engines": {
+    "node": ">=24"
+  },
+  "bin": {
+    "mcdevtools": "packages/init/bin/mcdevtools.mjs"
+  },
+  "scripts": {
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test"
+  }
+}
