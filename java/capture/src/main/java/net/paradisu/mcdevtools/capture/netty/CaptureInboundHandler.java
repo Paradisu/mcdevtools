@@ -53,7 +53,11 @@ final class CaptureInboundHandler extends ChannelInboundHandlerAdapter {
         if (!failed && msg instanceof ByteBuf buf) {
             try {
                 fillRemote(ctx);
-                engine.onFrame(info, direction, new ByteBufReader(buf));
+                // A compression handler appeared behind us: this frame is still compressed. The new tap is behind that
+                // handler and sees this very frame decompressed as it passes on, so it is not recorded here.
+                if (!NettyInjector.reanchorOnHandlers(ctx, engine, info, layout, direction, true)) {
+                    engine.onFrame(info, direction, new ByteBufReader(buf));
+                }
             } catch (Throwable t) {
                 fail(t);
             }

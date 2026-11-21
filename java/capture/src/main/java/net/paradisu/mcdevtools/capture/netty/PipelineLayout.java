@@ -34,13 +34,52 @@ import java.util.function.Predicate;
  * @param encoderAnchors candidate encoder handler names, first match wins
  * @param reanchorEvent user events after which the platform inserts handlers next to the codecs (compression), so the
  *     capture handlers must move back to just before them
+ * @param inboundReanchorHandlers handler names that, once they appear, were inserted next to the inbound codec by a
+ *     platform that fires no event (BungeeCord's {@code decompress}); the inbound frame being read is compressed
+ * @param outboundReanchorHandlers the same for the outbound codec (BungeeCord's older separate {@code compress})
  */
 public record PipelineLayout(
-        String name, List<String> decoderAnchors, List<String> encoderAnchors, Predicate<Object> reanchorEvent) {
+        String name,
+        List<String> decoderAnchors,
+        List<String> encoderAnchors,
+        Predicate<Object> reanchorEvent,
+        List<String> inboundReanchorHandlers,
+        List<String> outboundReanchorHandlers) {
 
-    /** Paper/Purpur: names from {@code net.minecraft.network.HandlerNames}; codecs are replaced in place. */
-    public static final PipelineLayout PAPER = new PipelineLayout(
-            "paper", List.of("decoder", "inbound_config"), List.of("encoder", "outbound_config"), event -> false);
+    /**
+     * Vanilla names from {@code net.minecraft.network.HandlerNames}, used by Paper, Purpur, Fabric, Forge, NeoForge and
+     * Sponge. Codecs are replaced in place, and compression is added after the splitter, so nothing moves.
+     */
+    public static final PipelineLayout VANILLA = new PipelineLayout(
+            "vanilla",
+            List.of("decoder", "inbound_config"),
+            List.of("encoder", "outbound_config"),
+            event -> false,
+            List.of(),
+            List.of());
+
+    /** Paper/Purpur: the vanilla layout. */
+    public static final PipelineLayout PAPER = VANILLA;
+
+    /**
+     * BungeeCord and Waterfall: {@code packet-decoder}/{@code packet-encoder}. Enabling compression inserts
+     * {@code decompress}/{@code compress} right before them without an event.
+     */
+    public static final PipelineLayout BUNGEE = new PipelineLayout(
+            "bungee",
+            List.of("packet-decoder"),
+            List.of("packet-encoder"),
+            event -> false,
+            List.of("decompress"),
+            List.of("compress"));
+
+    /**
+     * ViaProxy (Lenni0451's netty pipeline: {@code encryption, sizer, flow-control, compression, via-codec, ...,
+     * packet-codec}). {@code via-codec} translates between protocol versions; right before it the frames are decrypted
+     * and decompressed, in the protocol of the network side. One handler is both the decoder and the encoder anchor.
+     */
+    public static final PipelineLayout VIAPROXY = new PipelineLayout(
+            "viaproxy", List.of("via-codec"), List.of("via-codec"), event -> false, List.of(), List.of());
 
     /**
      * Velocity: names from {@code com.velocitypowered.proxy.network.Connections}. Enabling compression adds
@@ -51,5 +90,7 @@ public record PipelineLayout(
             "velocity",
             List.of("minecraft-decoder"),
             List.of("minecraft-encoder"),
-            event -> event instanceof Enum<?> e && e.name().startsWith("COMPRESSION_"));
+            event -> event instanceof Enum<?> e && e.name().startsWith("COMPRESSION_"),
+            List.of(),
+            List.of());
 }

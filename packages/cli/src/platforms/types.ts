@@ -71,8 +71,11 @@ export interface PlatformDef {
   pluginsDir?: string;
   /** Folder under the instance directory that holds plugin config folders (default: `pluginsDir`) */
   configDir?: string;
-  /** `plugin`: the capture plugin can be installed (default `none`) */
-  capture?: 'plugin' | 'none';
+  /**
+   * How packet capture hooks in: `plugin` installs the capture plugin (Paper-family, Velocity, Limbo), `agent` starts
+   * the JVM with the capture Java agent (platforms without a plugin API), `none` has no capture (default)
+   */
+  capture?: 'plugin' | 'agent' | 'none';
   /**
    * Runs once after the server file was copied into the instance directory, and again when the server file changed:
    * installers (Forge, NeoForge) write their libraries here. Returns nothing; throw (or `fail`) on error.

@@ -40,6 +40,10 @@ public final class ConnectionInfo {
     public volatile Session rejectedFor;
     /** Handler names of the live pipeline, for diagnostics; null when the platform has none. */
     public volatile java.util.function.Supplier<java.util.List<String>> pipelineNames;
+    /** Set once the capture handlers were moved behind a decompression handler the platform added without an event. */
+    public volatile boolean inboundAnchored;
+    /** The same for a compression handler on the outbound side. */
+    public volatile boolean outboundAnchored;
     /** Whether the login hello was seen (the connection is identified). */
     public volatile boolean identified;
     /** Serverbound handshake and hello frames, kept so a recording that starts at login can include them. */

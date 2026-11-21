@@ -248,6 +248,27 @@ test('ViaProxy arguments find their target and the modded platforms use mods/', 
   assert.equal(pluginsDirOf(platformOf('fabric')), 'mods');
   assert.equal(configDirOf(platformOf('forge')), 'config');
   assert.equal(pluginsDirOf(platformOf('purpur')), 'plugins');
-  assert.equal(capturableOf(platformOf('neoforge')), false);
+  assert.equal(platformOf('neoforge').capture, 'agent');
+  assert.equal(capturableOf(platformOf('neoforge')), true);
+  assert.equal(platformOf('folia').capture, 'plugin');
+  assert.equal(capturableOf(platformOf('limbo')), true);
   assert.equal(capturableOf(platformOf('folia')), true);
+});
+
+test('every variable the core templates use is provided by the core', async () => {
+  const { readdirSync, readFileSync: read } = await import('node:fs');
+  const { instancesOf, templateVars } = await import('../src/templates.ts');
+  write('config.toml', '[[networks]]\nname = "main"\n[[instances]]\nname = "p"\ntype = "velocity"\nnetwork = "main"\nport = 25565\ndebug_port = 5005\n[[instances]]\nname = "lobby"\ntype = "purpur"\nnetwork = "main"\nport = 30066\ndebug_port = 5006\ntry = true\n[[instances]]\nname = "limbo"\ntype = "limbo"\nport = 30000\ndebug_port = 5008\n');
+  const config = await loadConfig();
+  const provided = new Set<string>();
+  for (const instance of instancesOf(config)) for (const key of Object.keys(await templateVars(config, instance))) provided.add(key);
+  const templates = join(import.meta.dirname, '..', 'templates');
+  const used = new Map<string, string>();
+  for (const entry of readdirSync(templates, { withFileTypes: true, recursive: true })) {
+    if (!entry.isFile()) continue;
+    const file = join(entry.parentPath, entry.name);
+    for (const match of read(file, 'utf8').matchAll(/\$\{([A-Z_]+)\}/g)) used.set(match[1]!, file);
+  }
+  const missing = [...used].filter(([name]) => !provided.has(name)).map(([name, file]) => `${name} (${file})`);
+  assert.deepEqual(missing, []);
 });

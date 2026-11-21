@@ -34,6 +34,7 @@ import {
   recordingFlags,
 } from './wizard.ts';
 import { capturableOf } from '../platforms/index.ts';
+import { resolveForwarding } from '../topology.ts';
 import { linkOf, proxyNames, receiverOf } from './receivers.ts';
 import {
   type Capture,
@@ -847,7 +848,7 @@ async function protocolCommand(ctx: Ctx, args: string[]): Promise<void> {
 const PROBE_NAME = 'CaptureProbe';
 
 /** Logs in without a client: handshake + login hello are enough for the plugin to see and identify a connection. */
-async function probe(instance: Instance, protocol: ProtocolTable): Promise<{ ok: boolean; detail: string; handlers?: string[] }> {
+async function probe(instance: Instance, protocol: ProtocolTable, legacyForwarding: boolean): Promise<{ ok: boolean; detail: string; handlers?: string[] }> {
   const framed = (body: Buffer) => Buffer.concat([varInt(body.length), body]);
   const port = Buffer.alloc(2);
   port.writeUInt16BE(instance.port);
@@ -858,7 +859,9 @@ async function probe(instance: Instance, protocol: ProtocolTable): Promise<{ ok:
       socket.once('connect', resolve);
       socket.once('error', reject);
     });
-    socket.write(framed(Buffer.concat([varInt(0), varInt(protocol.protocolVersion), string('localhost'), port, varInt(2)])));
+    // A backend behind a legacy (BungeeCord-style) proxy only accepts the forwarding handshake: host, ip, uuid
+    const address = legacyForwarding ? `localhost\x00127.0.0.1\x00${randomBytes(16).toString('hex')}` : 'localhost';
+    socket.write(framed(Buffer.concat([varInt(0), varInt(protocol.protocolVersion), string(address), port, varInt(2)])));
     socket.write(framed(Buffer.concat([varInt(0), string(PROBE_NAME), randomBytes(16)])));
     for (let attempt = 0; attempt < 25; attempt++) {
       await sleep(200);
@@ -885,11 +888,15 @@ function checkPlacement(handlers: string[]): { ok: boolean; text: string } | und
     return undefined;
   }
   // Paper names the codec slots inbound_config/outbound_config until the connection reaches play
-  const decoders = ['decoder', 'inbound_config', 'minecraft-decoder'];
-  const encoders = ['encoder', 'outbound_config', 'minecraft-encoder'];
+  // Names per platform (java/capture PipelineLayout): vanilla, Velocity, BungeeCord, ViaProxy (one codec for both)
+  const decoders = ['decoder', 'inbound_config', 'minecraft-decoder', 'packet-decoder', 'via-codec'];
+  const encoders = ['encoder', 'outbound_config', 'minecraft-encoder', 'packet-encoder', 'via-codec'];
+  // The taps may sit next to each other (ViaProxy), and BungeeCord inserts decompress/compress next to a codec when
+  // compression is enabled (the taps move behind them on the next frame): look past those
+  const after = (index: number) => handlers.slice(index + 1).find((name) => !name.startsWith('mcdevtools_capture_') && name !== 'decompress' && name !== 'compress') ?? '';
   const problems: string[] = [];
-  if (!decoders.includes(handlers[inIndex + 1] ?? '')) problems.push(`inbound tap is followed by "${handlers[inIndex + 1]}", not a decoder`);
-  if (!encoders.includes(handlers[outIndex + 1] ?? '')) problems.push(`outbound tap is followed by "${handlers[outIndex + 1]}", not an encoder`);
+  if (!decoders.includes(after(inIndex))) problems.push(`inbound tap is followed by "${after(inIndex)}", not a decoder`);
+  if (!encoders.includes(after(outIndex))) problems.push(`outbound tap is followed by "${after(outIndex)}", not an encoder`);
   return problems.length > 0 ? { ok: false, text: problems.join('; ') } : { ok: true, text: 'taps sit before the decoder and encoder' };
 }
 
@@ -916,7 +923,8 @@ async function doctorCommand(ctx: Ctx, args: string[]): Promise<void> {
       } else {
         rows.push(['protocol hints', `${statusWord('ok')}  protocol ${hints.protocol}`]);
       }
-      const result = await probe(instance, protocol);
+      const legacy = instance.def.role === 'server' && instance.network !== undefined && resolveForwarding(ctx.config, instance.network) === 'legacy';
+      const result = await probe(instance, protocol, legacy);
       rows.push(['login probe', verdict(result.ok, result.detail)]);
       if (!result.ok) {
         failed = true;

@@ -12,4 +12,5 @@ plugins {
 }
 
 include(":capture")
+include(":capture-agent")
 include(":liquibase-runner")

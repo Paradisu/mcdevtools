@@ -34,9 +34,9 @@ export function configDirOf(def: PlatformDef): string {
   return def.configDir ?? pluginsDirOf(def);
 }
 
-/** Whether the capture plugin works on a platform. */
+/** Whether packet capture works on a platform (as a plugin or a Java agent). */
 export function capturableOf(def: PlatformDef): boolean {
-  return def.capture === 'plugin';
+  return def.capture === 'plugin' || def.capture === 'agent';
 }
 
 export function forwardingOf(def: PlatformDef): ResolvedForwarding[] {

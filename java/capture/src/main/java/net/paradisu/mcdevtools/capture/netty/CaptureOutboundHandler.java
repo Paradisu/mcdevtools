@@ -30,12 +30,23 @@ import net.paradisu.mcdevtools.capture.core.Direction;
 final class CaptureOutboundHandler extends ChannelOutboundHandlerAdapter {
     private final CaptureEngine engine;
     private final ConnectionInfo info;
+    private final PipelineLayout layout;
+    /** Direction of the inbound tap of the same connection, needed to move both taps together */
+    private final Direction inboundDirection;
+
     private final Direction direction;
     private boolean failed;
 
-    CaptureOutboundHandler(CaptureEngine engine, ConnectionInfo info, Direction direction) {
+    CaptureOutboundHandler(
+            CaptureEngine engine,
+            ConnectionInfo info,
+            PipelineLayout layout,
+            Direction inboundDirection,
+            Direction direction) {
         this.engine = engine;
         this.info = info;
+        this.layout = layout;
+        this.inboundDirection = inboundDirection;
         this.direction = direction;
     }
 
@@ -46,10 +57,19 @@ final class CaptureOutboundHandler extends ChannelOutboundHandlerAdapter {
                 if (info.remote == null) {
                     info.remote = CaptureInboundHandler.describe(ctx.channel().remoteAddress());
                 }
-                if (msg instanceof ByteBuf buf) {
-                    engine.onFrame(info, direction, new ByteBufReader(buf));
-                } else if (msg instanceof ByteBufHolder holder) {
-                    engine.onFrame(info, direction, new ByteBufReader(holder.content()));
+                ByteBuf content = msg instanceof ByteBuf buf
+                        ? buf
+                        : msg instanceof ByteBufHolder holder ? holder.content() : null;
+                if (content != null) {
+                    // A compression handler appeared behind us: this frame was compressed on its way here (the new tap
+                    // is past it,
+                    // so it never sees this frame), later ones are not
+                    boolean moved =
+                            NettyInjector.reanchorOnHandlers(ctx, engine, info, layout, inboundDirection, false);
+                    ByteBuf frame = moved ? CompressedFrame.decode(content) : content;
+                    if (frame != null) {
+                        engine.onFrame(info, direction, new ByteBufReader(frame));
+                    }
                 }
             } catch (Throwable t) {
                 failed = true;

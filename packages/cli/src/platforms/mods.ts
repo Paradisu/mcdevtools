@@ -17,7 +17,7 @@ const MODDED: Omit<PlatformDef, 'type' | 'label' | 'family' | 'resolve' | 'cache
   hotswap: false,
   worlds: true,
   installsProjectArtifacts: true,
-  capture: 'none',
+  capture: 'agent',
   forwarding: ['none'],
   pluginsDir: 'mods',
   configDir: 'config',

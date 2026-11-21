@@ -22,7 +22,7 @@ const BUNGEE: Omit<PlatformDef, 'type' | 'label' | 'resolve' | 'cacheName'> = {
   hotswap: false,
   worlds: false,
   installsProjectArtifacts: true,
-  capture: 'none',
+  capture: 'agent',
   forwarding: ['legacy', 'none'],
   launch: () => ['-Djline.terminal=jline.UnsupportedTerminal', '-jar', 'server.jar'],
 };
@@ -105,7 +105,7 @@ export const VIAPROXY: PlatformDef = {
   hotswap: false,
   worlds: false,
   installsProjectArtifacts: true,
-  capture: 'none',
+  capture: 'agent',
   // Not part of forwarding: the empty list excludes it from the network's mode
   forwarding: [],
   launch: ({ config, instance }) => ['-jar', 'server.jar', ...viaProxyArgs(config.instances, instance)],

@@ -5,7 +5,7 @@ import type { DevConfig } from './config.ts';
 import { readResolved, type ResolvedFiles } from './downloads.ts';
 import { type Instance, applyTemplates, instancesOf } from './templates.ts';
 import { capturableOf, pluginsDirOf } from './platforms/index.ts';
-import { CAPTURE_JAR, CAPTURE_JAR_NAME, ensureGradleCachesWritable, gradle } from './java.ts';
+import { CAPTURE_AGENT_JAR, CAPTURE_JAR, CAPTURE_JAR_NAME, ensureGradleCachesWritable, gradle } from './java.ts';
 import { CACHE, RUN, ROOT, capture, fail, log, portListening, portOpen, run, sleep, waitFor, warn } from './util.ts';
 import { dbReachable } from './db.ts';
 import { readState, shareTable } from './share/state.ts';
@@ -93,7 +93,7 @@ async function prepare(config: DevConfig, resolved: ResolvedFiles, instance: Ins
       wanted.set(basename(artifact.path), source);
     }
   }
-  if (withCapture) {
+  if (withCapture && instance.def.capture === 'plugin') {
     if (!existsSync(CAPTURE_JAR)) {
       fail(`${CAPTURE_JAR} does not exist; run \`mcdev build\` (or set capture.enabled = false)`);
     }
@@ -119,6 +119,8 @@ async function launch(config: DevConfig, minecraft: string, instance: Instance, 
     ...(withCapture
       ? [`-Dmcdevtools.capture.socket=${controlSocket(instance)}`, `-Dmcdevtools.capture.protocol=${hintsFile(minecraft)}`]
       : []),
+    // Platforms without a plugin API get the capture Java agent; proxies also hook their outbound connections
+    ...(withCapture && instance.def.capture === 'agent' ? agentFlags(instance) : []),
     // No X11 libraries in the image, and a forwarded DISPLAY (WSLg) would otherwise make AWT load them (BKCommonLib fails)
     '-Djava.awt.headless=true',
     `-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:${instance.debugPort}`,
@@ -134,6 +136,18 @@ async function launch(config: DevConfig, minecraft: string, instance: Instance, 
     cwd: instance.dir,
     stopCommand: stopCommand(instance),
   });
+}
+
+/** `-javaagent` and the properties the agent reads. */
+function agentFlags(instance: Instance): string[] {
+  if (!existsSync(CAPTURE_AGENT_JAR)) {
+    fail(`${CAPTURE_AGENT_JAR} does not exist; run \`mcdev build\` (or set capture.enabled = false)`);
+  }
+  return [
+    `-javaagent:${CAPTURE_AGENT_JAR}`,
+    `-Dmcdevtools.capture.platform=${instance.def.type}`,
+    ...(instance.def.role === 'proxy' ? ['-Dmcdevtools.capture.backend=true'] : []),
+  ];
 }
 
 function stopCommand(instance: Instance): string {
@@ -356,7 +370,7 @@ export async function build(config: DevConfig): Promise<void> {
   }
   if (config.capture.enabled) {
     log(dim('Building the capture plugin'));
-    gradle([':capture:jar']);
+    gradle([':capture:jar', ':capture-agent:shadowJar']);
   }
 }
 

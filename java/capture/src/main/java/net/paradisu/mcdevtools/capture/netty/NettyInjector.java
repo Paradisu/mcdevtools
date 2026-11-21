@@ -18,6 +18,7 @@
 package net.paradisu.mcdevtools.capture.netty;
 
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPipeline;
 import net.paradisu.mcdevtools.capture.core.CaptureEngine;
 import net.paradisu.mcdevtools.capture.core.ConnectionInfo;
@@ -28,7 +29,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
-/** Adds the capture handlers to a freshly initialised channel. Shared by Paper and Velocity. */
+/** Adds the capture handlers to a freshly initialised channel. Shared by every platform. */
 public final class NettyInjector {
     static final String INBOUND = "mcdevtools_capture_in";
     static final String OUTBOUND = "mcdevtools_capture_out";
@@ -94,8 +95,56 @@ public final class NettyInjector {
             pipeline.remove(OUTBOUND);
         }
         pipeline.addBefore(decoder, INBOUND, new CaptureInboundHandler(engine, info, layout, inbound));
-        pipeline.addBefore(encoder, OUTBOUND, new CaptureOutboundHandler(engine, info, inbound.opposite()));
+        pipeline.addBefore(
+                encoder, OUTBOUND, new CaptureOutboundHandler(engine, info, layout, inbound, inbound.opposite()));
         return true;
+    }
+
+    /** Layouts tried by {@link #detect}, most specific first. */
+    private static final List<PipelineLayout> KNOWN =
+            List.of(PipelineLayout.VELOCITY, PipelineLayout.BUNGEE, PipelineLayout.VIAPROXY, PipelineLayout.VANILLA);
+
+    /**
+     * The layout whose codec handlers are in the pipeline, or null (not a Minecraft connection, or a platform this does
+     * not know). Used by the Java agent, which cannot know the platform's layout in advance.
+     */
+    public static PipelineLayout detect(ChannelPipeline pipeline) {
+        for (PipelineLayout layout : KNOWN) {
+            if (first(pipeline, layout.decoderAnchors()) != null && first(pipeline, layout.encoderAnchors()) != null) {
+                return layout;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Moves the capture handlers behind a (de)compression handler the platform inserted without firing an event. Each
+     * tap only reacts to the handler of its own direction.
+     *
+     * @return true when it moved them (the frame being processed was seen before that and may still be compressed)
+     */
+    static boolean reanchorOnHandlers(
+            ChannelHandlerContext ctx,
+            CaptureEngine engine,
+            ConnectionInfo info,
+            PipelineLayout layout,
+            Direction inbound,
+            boolean fromInboundTap) {
+        if (fromInboundTap ? info.inboundAnchored : info.outboundAnchored) {
+            return false;
+        }
+        for (String name : fromInboundTap ? layout.inboundReanchorHandlers() : layout.outboundReanchorHandlers()) {
+            if (ctx.pipeline().get(name) != null) {
+                if (fromInboundTap) {
+                    info.inboundAnchored = true;
+                } else {
+                    info.outboundAnchored = true;
+                }
+                anchor(ctx.pipeline(), engine, info, layout, inbound);
+                return true;
+            }
+        }
+        return false;
     }
 
     private static String first(ChannelPipeline pipeline, List<String> names) {
