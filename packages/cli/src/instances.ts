@@ -119,7 +119,7 @@ async function launch(config: DevConfig, minecraft: string, instance: Instance, 
     ...(withCapture
       ? [`-Dmcdevtools.capture.socket=${controlSocket(instance)}`, `-Dmcdevtools.capture.protocol=${hintsFile(minecraft)}`]
       : []),
-    // Platforms without a plugin API get the capture Java agent; proxies also hook their outbound connections
+    // Platforms without a capture plugin get the capture Java agent; proxies also hook their outbound connections
     ...(withCapture && instance.def.capture === 'agent' ? agentFlags(instance) : []),
     // No X11 libraries in the image, and a forwarded DISPLAY (WSLg) would otherwise make AWT load them (BKCommonLib fails)
     '-Djava.awt.headless=true',

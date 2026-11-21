@@ -28,7 +28,7 @@ import static net.bytebuddy.matcher.ElementMatchers.named;
 import static net.bytebuddy.matcher.ElementMatchers.takesArguments;
 
 /**
- * Dev-only packet capture for servers and proxies that have no plugin API for it (BungeeCord, ViaProxy, Fabric, Forge,
+ * Dev-only packet capture for servers and proxies that have no capture plugin (BungeeCord, ViaProxy, Fabric, Forge,
  * NeoForge, Sponge). Started with {@code -javaagent}: it starts the capture engine and control socket at once, and
  * instruments netty so every accepted (and, for proxies, every outbound) channel gets the capture handlers.
  *

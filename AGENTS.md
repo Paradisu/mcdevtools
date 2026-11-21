@@ -13,7 +13,7 @@ mcdevtools: a local development network for Minecraft plugin projects. One CLI (
 | `packages/cli` | The `mcdev` CLI (`@mcdevtools/cli`). Exports `./extension`, `./mc`, `./output`, `./prompt`, `./db`, `./util` for extensions; templates, scaffold, zellij config |
 | `packages/init` | `init` / `update` / wiring: plain JavaScript (JSDoc types), no dependencies |
 | `java/capture` | Packet capture plugin (one jar for Paper, Velocity and Limbo; `mcdevtools-capture.jar`) and the netty/core classes the agent reuses. No project dependencies |
-| `java/capture-agent` | Packet capture Java agent (`mcdevtools-capture-agent.jar`, Byte Buddy and Gson shaded) for platforms without a plugin API |
+| `java/capture-agent` | Packet capture Java agent (`mcdevtools-capture-agent.jar`, Byte Buddy and Gson shaded) for platforms that have no capture plugin of their own (one agent instead of a plugin or mod per ecosystem) |
 | `java/liquibase-runner` | Liquibase runner used by `mcdev db`; reads changelogs from a search path |
 | `java/build-logic` | Convention plugin `mcdevtools.java-conventions` |
 | `devcontainer` | Image Dockerfile, `mcdev` wrapper, adopter `template/` |

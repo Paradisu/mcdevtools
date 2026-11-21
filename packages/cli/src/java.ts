@@ -9,7 +9,7 @@ export const JAVA_BUILD = join(TOOL_ROOT, 'java');
 export const CAPTURE_JAR_NAME = 'mcdevtools-capture.jar';
 export const CAPTURE_JAR = join(JAVA_BUILD, 'capture', 'build', 'libs', CAPTURE_JAR_NAME);
 
-/** The capture Java agent (shaded), for platforms without a plugin API */
+/** The capture Java agent (shaded), for platforms without a capture plugin */
 export const CAPTURE_AGENT_JAR = join(JAVA_BUILD, 'capture-agent', 'build', 'libs', 'mcdevtools-capture-agent.jar');
 
 export const LIQUIBASE_RUNNER = join(JAVA_BUILD, 'liquibase-runner', 'build', 'install', 'liquibase-runner', 'bin', 'liquibase-runner');

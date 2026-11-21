@@ -73,7 +73,7 @@ export interface PlatformDef {
   configDir?: string;
   /**
    * How packet capture hooks in: `plugin` installs the capture plugin (Paper-family, Velocity, Limbo), `agent` starts
-   * the JVM with the capture Java agent (platforms without a plugin API), `none` has no capture (default)
+   * the JVM with the capture Java agent (platforms without a capture plugin), `none` has no capture (default)
    */
   capture?: 'plugin' | 'agent' | 'none';
   /**
