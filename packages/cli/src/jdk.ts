@@ -30,9 +30,13 @@ function validSdkmanId(spec: string): boolean {
   return /^[A-Za-z0-9._+-]+$/.test(spec);
 }
 
-/** `sdk install java <id>` through sdkman's init script (the id is passed as an argument, never interpolated). */
+/**
+ * `sdk install java <id>` through sdkman's init script (the id is passed as an argument, never interpolated). Never
+ * changes the default JDK: with `sdkman_auto_answer=true` (the dev container sets it) sdkman would answer its own
+ * "set as default?" question with yes, so that is switched off for this call and the question answered with no.
+ */
 export function installCommand(spec: string): string[] {
-  return ['bash', '-lc', 'source "$SDKMAN_DIR/bin/sdkman-init.sh" && printf "n\\n" | sdk install java "$1"', '_', spec];
+  return ['bash', '-lc', 'source "$SDKMAN_DIR/bin/sdkman-init.sh" && sdkman_auto_answer=false && printf "n\\n" | sdk install java "$1"', '_', spec];
 }
 
 export type InstallMode = 'install' | 'ask' | 'fail';

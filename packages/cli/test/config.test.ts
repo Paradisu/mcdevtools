@@ -174,6 +174,7 @@ test('java specs resolve to sdkman candidates, absolute paths or the PATH java',
   await assert.rejects(() => ensureJava('21; rm -rf /', 'fail'), /neither an absolute path nor a sdkman candidate id/);
   await assert.rejects(() => ensureJava('/nope/jdk', 'fail'), /does not exist/);
   assert.deepEqual(installCommand('21.0.8-tem').slice(-2), ['_', '21.0.8-tem'], 'the id is an argument, not part of the script');
+  assert.match(installCommand('21.0.8-tem')[2]!, /sdkman_auto_answer=false && printf "n\\n" \| sdk install/, 'it must not become the default JDK');
 
   // A fake java that prints a version like the real one does, on stderr
   const fake = join(dir, 'candidates', 'java', '17.0.1-tem', 'bin');
