@@ -56,7 +56,16 @@ public final class AgentEngine {
         try {
             CaptureEngine created = new CaptureEngine(
                     platform, "1", ProtocolHints.load(System.getProperty("mcdevtools.capture.protocol")), log);
-            new ControlServer(created, Path.of(socket)).start();
+            ControlServer server = new ControlServer(created, Path.of(socket));
+            server.start();
+            // Closes the control socket and flushes a running recording when the server stops
+            Runtime.getRuntime()
+                    .addShutdownHook(new Thread(
+                            () -> {
+                                created.shutdown();
+                                server.close();
+                            },
+                            "McDevCapture-shutdown"));
             log.info("Packet capture ready (control socket " + socket + ")");
             engine = created;
         } catch (Exception e) {

@@ -44,8 +44,7 @@ final class CompressedFrame {
             }
             byte[] compressed = new byte[in.readableBytes()];
             in.readBytes(compressed);
-            Inflater inflater = new Inflater();
-            try {
+            try (Inflater inflater = new Inflater()) {
                 inflater.setInput(compressed);
                 byte[] out = new byte[dataLength];
                 int read = 0;
@@ -57,8 +56,6 @@ final class CompressedFrame {
                     read += n;
                 }
                 return read == dataLength ? Unpooled.wrappedBuffer(out) : null;
-            } finally {
-                inflater.end();
             }
         } catch (DataFormatException | RuntimeException e) {
             return null;
