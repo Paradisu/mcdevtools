@@ -1,7 +1,9 @@
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parse } from 'smol-toml';
-import type { Platform } from './config.ts';
+import type { DevConfig, Platform } from './config.ts';
+import type { PlatformDef } from './platforms/index.ts';
 import { ROOT } from './util.ts';
 
 /**
@@ -26,9 +28,13 @@ const BY_GROUP: Record<string, string[]> = {
   'org.hibernate.orm': ['HibernateJakarta'],
 };
 
-/** Maven groups of every library in gradle/libs.versions.toml. */
-export async function catalogGroups(): Promise<Set<string>> {
-  const toml = parse(await readFile(join(ROOT, 'gradle', 'libs.versions.toml'), 'utf8')) as {
+/** Maven groups of every library in the project's Gradle version catalog ([versions.auto].catalog); none without one. */
+export async function catalogGroups(config: DevConfig): Promise<Set<string>> {
+  const path = join(ROOT, config.versions.auto.catalog);
+  if (!existsSync(path)) {
+    return new Set();
+  }
+  const toml = parse(await readFile(path, 'utf8')) as {
     libraries?: Record<string, string | { group?: string; module?: string }>;
   };
   const groups = new Set<string>();
@@ -45,8 +51,8 @@ export async function catalogGroups(): Promise<Set<string>> {
  * JVM flags that enable HotswapAgent with only the plugins this project can use. Limbo runs none of our code,
  * so it gets no agent. `extraPlugins` are kept in addition (`hotswap_plugins` in config.toml).
  */
-export function hotswapFlags(platform: Platform, groups: Iterable<string>, extraPlugins: string[]): string[] {
-  if (platform === 'limbo') {
+export function hotswapFlags(target: Platform | PlatformDef, groups: Iterable<string>, extraPlugins: string[]): string[] {
+  if (typeof target === 'string' ? target === 'limbo' : !target.hotswap) {
     return [];
   }
   const keep = new Set([...ALWAYS, ...extraPlugins, ...[...groups].flatMap((group) => BY_GROUP[group] ?? [])].map((name) => name.toLowerCase()));

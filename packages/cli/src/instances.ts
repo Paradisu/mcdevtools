@@ -1,9 +1,10 @@
 import { copyFile, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { existsSync, readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import type { DevConfig } from './config.ts';
 import { readResolved, type ResolvedFiles } from './downloads.ts';
 import { type Instance, applyTemplates, instancesOf } from './templates.ts';
+import { CAPTURE_JAR, CAPTURE_JAR_NAME, gradle } from './java.ts';
 import { CACHE, RUN, ROOT, capture, fail, log, portListening, portOpen, run, sleep, waitFor, warn } from './util.ts';
 import { dbReachable } from './db.ts';
 import { readState, shareTable } from './share/state.ts';
@@ -12,9 +13,6 @@ import { attach, dotDir, isRunning, javaPid, kill, runLine, sendLine, spawnSuper
 import { controlSocket } from './capture/paths.ts';
 import { hintsFile } from './capture/protocol.ts';
 import { catalogGroups, hotswapFlags } from './hotswap.ts';
-
-const PLUGIN_JAR = join(ROOT, 'build', 'libs', 'ParadisuPlugin.jar');
-const CAPTURE_JAR = join(ROOT, 'devtools', 'capture', 'build', 'libs', 'ParadisuCapture.jar');
 
 export { isRunning };
 
@@ -30,7 +28,7 @@ export function select(config: DevConfig, names: string[]): Instance[] {
 /** Finds JVM flags the installed java accepts: enhanced redefinition needs JetBrains Runtime. */
 function jvmFlags(config: DevConfig): string[] {
   const flags: string[] = [];
-  if (config.jvm.enhanced_redefinition) {
+  if (config.java.enhanced_redefinition) {
     const attempts = [
       ['-XX:+AllowEnhancedClassRedefinition'],
       // Some JBR builds reject enhanced redefinition with the default collector
@@ -43,19 +41,15 @@ function jvmFlags(config: DevConfig): string[] {
       warn('This java does not support -XX:+AllowEnhancedClassRedefinition (is it JetBrains Runtime?); hot reload is limited');
     }
   }
-  flags.push(...config.jvm.extra_flags);
+  flags.push(...config.java.extra_flags);
   return [...new Set(flags)];
 }
 
 async function prepare(config: DevConfig, resolved: ResolvedFiles, instance: Instance): Promise<void> {
   await mkdir(join(instance.dir, 'plugins'), { recursive: true });
-  const serverJar = {
-    paper: resolved.purpur.file,
-    velocity: resolved.velocity.file,
-    limbo: resolved.limbo?.file ?? fail('Limbo has not been downloaded; run `dev setup`'),
-  }[instance.platform];
-  await copyFile(serverJar, join(instance.dir, 'server.jar'));
-  if (instance.platform === 'paper') {
+  const server = resolved.servers[instance.name] ?? fail(`${instance.name} has not been downloaded; run \`mcdev setup\``);
+  await copyFile(server.file, join(instance.dir, 'server.jar'));
+  if (instance.def.needsEula) {
     await writeFile(join(instance.dir, 'eula.txt'), 'eula=true\n');
   }
 
@@ -68,14 +62,20 @@ async function prepare(config: DevConfig, resolved: ResolvedFiles, instance: Ins
     wanted.set(`${plugin.key}.jar`, plugin.file);
     installedKeys.push(plugin.key);
   }
-  if (instance.platform !== 'limbo') {
-    wanted.set('ParadisuPlugin.jar', PLUGIN_JAR);
+  if (instance.def.installsProjectArtifacts) {
+    for (const artifact of config.build.artifacts.filter((candidate) => candidate.platforms.includes(instance.platform))) {
+      const source = join(ROOT, artifact.path);
+      if (!existsSync(source)) {
+        fail(`${artifact.path} does not exist; run \`mcdev build\` (build.artifacts in .mcdevtools/config.toml)`);
+      }
+      wanted.set(basename(artifact.path), source);
+    }
   }
   if (config.capture.enabled) {
     if (!existsSync(CAPTURE_JAR)) {
-      fail(`${CAPTURE_JAR} does not exist; run \`dev build\` (or set capture.enabled = false)`);
+      fail(`${CAPTURE_JAR} does not exist; run \`mcdev build\` (or set capture.enabled = false)`);
     }
-    wanted.set('ParadisuCapture.jar', CAPTURE_JAR);
+    wanted.set(CAPTURE_JAR_NAME, CAPTURE_JAR);
   }
   for (const stale of previous.filter((name) => !wanted.has(name))) {
     await rm(join(instance.dir, 'plugins', stale), { force: true });
@@ -95,16 +95,16 @@ async function launch(config: DevConfig, minecraft: string, instance: Instance, 
     ...flags,
     // The capture plugin does nothing without its control socket
     ...(config.capture.enabled
-      ? [`-Dparadisu.capture.socket=${controlSocket(instance)}`, `-Dparadisu.capture.protocol=${hintsFile(minecraft)}`]
+      ? [`-Dmcdevtools.capture.socket=${controlSocket(instance)}`, `-Dmcdevtools.capture.protocol=${hintsFile(minecraft)}`]
       : []),
     // No X11 libraries in the image, and a forwarded DISPLAY (WSLg) would otherwise make AWT load them (BKCommonLib fails)
     '-Djava.awt.headless=true',
     `-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:${instance.debugPort}`,
     // stdin is a pipe owned by the supervisor, not a terminal: use the plain console reader, but keep colours
-    ...(instance.platform === 'limbo' ? [] : ['-Dterminal.jline=false', '-Dterminal.ansi=true']),
+    ...(instance.def.terminalFlags ? ['-Dterminal.jline=false', '-Dterminal.ansi=true'] : []),
     '-jar',
     'server.jar',
-    ...(instance.platform === 'velocity' ? [] : ['--nogui']),
+    ...(instance.def.nogui ? ['--nogui'] : []),
   ];
   await spawnSupervisor(instance, {
     cmd: 'java',
@@ -115,16 +115,16 @@ async function launch(config: DevConfig, minecraft: string, instance: Instance, 
 }
 
 function stopCommand(instance: Instance): string {
-  return instance.platform === 'velocity' ? 'shutdown' : 'stop';
+  return instance.def.stopCommand;
 }
 
-/** The current log file: Velocity and Paper write logs/latest.log, Limbo names logs after its start time. */
+/** The current log file: most servers write logs/latest.log, Limbo names logs after its start time. */
 function logFile(instance: Instance): string | undefined {
   const dir = join(instance.dir, 'logs');
   if (!existsSync(dir)) {
     return undefined;
   }
-  if (instance.platform !== 'limbo') {
+  if (!instance.def.timestampedLogs) {
     const path = join(dir, 'latest.log');
     return existsSync(path) ? path : undefined;
   }
@@ -145,8 +145,7 @@ async function reportedDone(instance: Instance, since: number): Promise<boolean>
   if (!logPath || (await stat(logPath)).mtimeMs < since) {
     return false;
   }
-  const ready = instance.platform === 'limbo' ? /Limbo server listening/ : /Done \(/;
-  return ready.test(await readFile(logPath, 'utf8'));
+  return instance.def.readyPattern.test(await readFile(logPath, 'utf8'));
 }
 
 async function firstStartCommands(instance: Instance, since: number): Promise<void> {
@@ -168,30 +167,25 @@ async function firstStartCommands(instance: Instance, since: number): Promise<vo
 
 export async function start(config: DevConfig, names: string[], noBuild: boolean, acceptEula: boolean): Promise<void> {
   const instances = select(config, names);
-  if (instances.some((instance) => instance.platform === 'paper') && !acceptEula) {
+  if (instances.some((instance) => instance.def.needsEula) && !acceptEula) {
     fail('Set accept_eula = true in .mcdevtools/config.local.toml to accept the Minecraft EULA (https://aka.ms/MinecraftEULA).');
   }
   const resolved = await readResolved();
   if (!noBuild) {
-    await build();
+    await build(config);
   }
-  if (!existsSync(PLUGIN_JAR)) {
-    fail(`${PLUGIN_JAR} does not exist; run \`dev build\``);
-  }
-  if (!(await waitFor(() => dbReachable(), 60_000, 2000))) {
-    fail('PostgreSQL is not reachable (check PARADISU_DB_HOST).');
+  if (config.db?.required && !(await waitFor(() => dbReachable(), 60_000, 2000))) {
+    fail('PostgreSQL is not reachable (check MCDEV_DB_HOST).');
   }
 
   step('Starting network');
   const launchedAt = Date.now();
   const started: Instance[] = [];
   const flags = jvmFlags(config);
-  const groups = config.jvm.hotswap_agent ? await catalogGroups() : [];
-  // Limbo goes first so it is subscribed before the proxy tells it to transfer players back, then the proxy
-  // (it runs the database migrations before it binds its port), then the backends
-  const ordered = (['limbo', 'velocity', 'paper'] as const).flatMap((platform) =>
-    instances.filter((i) => i.platform === platform),
-  );
+  const groups = config.java.hotswap_agent ? await catalogGroups(config) : [];
+  // Standalone servers (Limbo) go first so they are subscribed before a proxy tells them to transfer players back,
+  // then the proxies (which may run database migrations before they bind their port), then the backends
+  const ordered = [...instances].sort((a, b) => a.def.startOrder - b.def.startOrder);
   const row = streamRow([{ min: Math.max(0, ...ordered.map((i) => i.name.length)) }, { min: 8 }]);
   for (const instance of ordered) {
     if (isRunning(instance)) {
@@ -199,14 +193,14 @@ export async function start(config: DevConfig, names: string[], noBuild: boolean
       continue;
     }
     await prepare(config, resolved, instance);
-    const agent = config.jvm.hotswap_agent ? hotswapFlags(instance.platform, groups, config.jvm.hotswap_plugins) : [];
+    const agent = config.java.hotswap_agent ? hotswapFlags(instance.def, groups, config.java.hotswap_plugins) : [];
     await launch(config, resolved.minecraft, instance, [...new Set([...flags, ...agent])]);
     started.push(instance);
     log(`  ${row([instance.name, statusWord('starting'), `port ${instance.port}  debug ${instance.debugPort}`])}`);
-    if (instance.platform === 'velocity') {
+    if (instance.def.waitForPort) {
       const up = await waitFor(() => portOpen(instance.port), 120_000);
       if (!up) {
-        fail(`The proxy did not open port ${instance.port} within 120s. Last log lines:\n${logTail(instance)}`);
+        fail(`${instance.name} did not open port ${instance.port} within 120s. Last log lines:\n${logTail(instance)}`);
       }
     }
   }
@@ -218,7 +212,8 @@ export async function start(config: DevConfig, names: string[], noBuild: boolean
   }
   await Promise.all(started.map((instance) => firstStartCommands(instance, launchedAt)));
 
-  log(`Ready. Join at localhost:${config.proxy.port}`);
+  const entry = [...new Set(started.filter((i) => i.def.role === 'proxy'))];
+  log(entry.length > 0 ? `Ready. Join at ${entry.map((i) => `localhost:${i.port}`).join(' or ')}` : 'Ready.');
 }
 
 export async function stop(config: DevConfig, names: string[]): Promise<void> {
@@ -250,14 +245,14 @@ export async function status(config: DevConfig): Promise<void> {
     };
     rows.push([
       instance.name,
-      instance.platform,
+      instance.def.type,
       statusWord(running ? 'running' : instance.enabled ? 'stopped' : 'disabled'),
       await port(instance.port),
       await port(instance.debugPort),
       running ? String(javaPid(instance) ?? '?') : '',
     ]);
   }
-  log(table(['instance', 'platform', 'state', 'port', 'debug', { header: 'pid', align: 'right' }], rows));
+  log(table(['instance', 'type', 'state', 'port', 'debug', { header: 'pid', align: 'right' }], rows));
   log('');
   log(shareTable(readState()));
 }
@@ -294,6 +289,9 @@ export async function resetWorld(config: DevConfig, name: string): Promise<void>
   if (isRunning(instance)) {
     fail(`Stop ${name} first`);
   }
+  if (!instance.def.worlds) {
+    fail(`${name} has no world to reset`);
+  }
   if (!existsSync(instance.dir)) {
     return;
   }
@@ -312,9 +310,16 @@ export async function clean(all: boolean): Promise<void> {
   }
 }
 
-export async function build(): Promise<void> {
-  log(dim('Building plugin jar'));
-  run('./gradlew', ['-q', 'shadowJar', ':devtools:capture:jar']);
+/** Runs the project's build ([build].command) and, when capture is enabled, builds the capture jar. */
+export async function build(config: DevConfig): Promise<void> {
+  if (config.build.command.length > 0) {
+    log(dim('Building the project'));
+    run(config.build.command[0]!, config.build.command.slice(1));
+  }
+  if (config.capture.enabled) {
+    log(dim('Building the capture plugin'));
+    gradle([':capture:jar']);
+  }
 }
 
 /**
@@ -328,7 +333,8 @@ export async function rerender(config: DevConfig, name: string): Promise<boolean
     return false;
   }
   const names: string[] = JSON.parse(await readFile(manifestPath, 'utf8'));
-  const keys = names.filter((jar) => jar !== 'ParadisuPlugin.jar' && jar !== 'ParadisuCapture.jar').map((jar) => jar.slice(0, -'.jar'.length));
+  const own = new Set([CAPTURE_JAR_NAME, ...config.build.artifacts.map((artifact) => basename(artifact.path))]);
+  const keys = names.filter((jar) => !own.has(jar)).map((jar) => jar.slice(0, -'.jar'.length));
   await applyTemplates(config, instance, keys);
   return true;
 }

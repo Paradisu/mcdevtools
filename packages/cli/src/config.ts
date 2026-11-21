@@ -1,13 +1,17 @@
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { parse } from 'smol-toml';
-import { CONFIG_DIR, deepMerge, fail } from './util.ts';
+import { CONFIG_DIR, ROOT, deepMerge, fail } from './util.ts';
 
-/** paper = the Bukkit-family backends (Purpur), velocity = the proxy, limbo = the standalone Limbo server */
+/**
+ * Plugin/template family: paper = the Bukkit-family backends (Purpur and other Paper forks), velocity = the
+ * proxy, limbo = the standalone Limbo server. Plugins target a family (`platforms = ["paper"]`), templates live in
+ * `plugins/<key>/<family>/`. A family is not an instance type (see platforms/).
+ */
 export type Platform = 'paper' | 'velocity' | 'limbo';
 
-export interface JvmConfig {
+export interface JavaConfig {
   enhanced_redefinition: boolean;
   hotswap_agent: boolean;
   /** HotswapAgent plugins to load besides the ones the project's libraries need (see hotswap.ts) */
@@ -15,35 +19,86 @@ export interface JvmConfig {
   extra_flags: string[];
 }
 
-export interface ProxyConfig {
-  port: number;
-  /** Port clients use when it differs from `port` (for example when PARADISU_PROXY_PORT remaps it) */
-  public_port?: number;
-  debug_port: number;
-  memory: string;
-  first_start_commands: string[];
-}
-
-export interface LimboConfig {
-  enabled: boolean;
-  port: number;
-  /** Port clients use when it differs from `port` (for example when PARADISU_LIMBO_PORT remaps it) */
-  public_port?: number;
-  debug_port: number;
-  memory: string;
-  first_start_commands: string[];
-}
-
-export interface ServerConfig {
+/** One server process: a proxy, a backend or a standalone server. Keys not listed here are kept in `extra`. */
+export interface InstanceConfig {
   name: string;
+  /** A registered platform type: purpur, velocity, limbo (see platforms/) */
+  type: string;
   enabled: boolean;
+  /** The network this instance belongs to; absent = standalone */
+  network?: string;
   port: number;
+  /** Port clients use when it differs from `port` (for example when MCDEV_PROXY_PORT remaps it) */
+  public_port?: number;
   debug_port: number;
   memory: string;
-  try: boolean;
-  context: { server: string; warp: string; inventory: string };
-  world_preset: 'redstone_ready' | 'void' | 'default';
+  /** "auto" derives it (see [versions]) or a version of this platform */
+  version: string;
+  /** "auto" = latest build, or a build id to pin exactly */
+  build: string;
   first_start_commands: string[];
+  /** Backends: listed in the proxy's `try` order */
+  try?: boolean;
+  world_preset?: 'redstone_ready' | 'void' | 'default';
+  /** Every other key of the table; extensions read their own settings from here */
+  extra: Record<string, unknown>;
+}
+
+export type ForwardingMode = 'auto' | 'modern' | 'legacy' | 'none';
+
+/** A set of proxies and the backends they route to; instances without a network are standalone. */
+export interface NetworkConfig {
+  name: string;
+  forwarding: ForwardingMode;
+  /** Defaults to the top-level online_mode */
+  online_mode?: boolean;
+}
+
+export interface BuildArtifact {
+  /** Relative to the project root */
+  path: string;
+  /** Plugin families the artifact is installed on */
+  platforms: Platform[];
+}
+
+/** The project's own build: run before `start`, and its artifacts are copied into matching instances. */
+export interface BuildConfig {
+  /** e.g. ["./gradlew", "-q", "shadowJar"]; empty = nothing to build */
+  command: string[];
+  artifacts: BuildArtifact[];
+}
+
+export interface VersionsConfig {
+  /** "auto" reads it from the catalog (see auto), or a Minecraft version */
+  minecraft: string;
+  auto: {
+    /** Gradle version catalog the "auto" versions come from, relative to the project root */
+    catalog: string;
+    /** Catalog version key whose "<mc>.build.N" value gives the Minecraft version */
+    minecraft_from: string;
+    /** Catalog version key of velocity-api (the Velocity version, with -SNAPSHOT) */
+    velocity_from: string;
+  };
+}
+
+export interface MigrationsConfig {
+  /** A registered migration provider (liquibase is built in) */
+  tool: string;
+  /** Directory that changelog paths resolve against, relative to the project root */
+  search_path: string;
+  /** Master changelog, relative to search_path */
+  changelog: string;
+  /** SQL seeds named after changelog ids, relative to .mcdevtools */
+  seed_dir: string;
+}
+
+export interface DbConfig {
+  kind: 'postgres';
+  /** The first one is the main database; `db reset --all` also recreates the rest, and profiles dump all of them */
+  databases: string[];
+  /** `start` waits for the database before launching anything */
+  required: boolean;
+  migrations?: MigrationsConfig;
 }
 
 export interface PluginConfig {
@@ -91,7 +146,8 @@ export interface WebConfig {
   bind: string;
 }
 
-export type ShareTarget = 'proxy' | 'limbo' | 'web';
+/** An instance name (a proxy or standalone server) or `web` */
+export type ShareTarget = string;
 
 export interface ShareConfig {
   /** Tunnel service: a name from `dev share providers` */
@@ -118,26 +174,27 @@ export interface CaptureConfig {
 }
 
 export interface DevConfig {
+  /** Config schema version; see migrations/ */
+  format: number;
   accept_eula: boolean;
-  minecraft_version: string;
-  purpur_build: string;
-  velocity_version: string;
-  /** "auto" = latest build of velocity_version, or a Fill build id (set by profile imports to pin the exact build) */
-  velocity_build: string;
   /** Overrides the DataVersion detected from the server jar (for generated items) */
   data_version?: number;
-  limbo_version: string;
-  /** Address clients use to reach this machine; the proxy tells players to transfer to it */
+  /** Address clients use to reach this machine; proxies tell players to transfer to it */
   public_host: string;
   online_mode: boolean;
-  jvm: JvmConfig;
-  proxy: ProxyConfig;
-  limbo: LimboConfig;
+  /** Extension entry points, relative to .mcdevtools or package names resolvable from the project root */
+  extensions: string[];
+  versions: VersionsConfig;
+  build: BuildConfig;
+  java: JavaConfig;
+  db?: DbConfig;
+  redis: { enabled: boolean };
+  networks: NetworkConfig[];
+  instances: InstanceConfig[];
   ui: UiConfig;
   web: WebConfig;
   share: ShareConfig;
   capture: CaptureConfig;
-  servers: ServerConfig[];
   plugins: PluginConfig[];
 }
 
@@ -154,37 +211,87 @@ export interface Env {
   redisHost: string;
 }
 
+let defaultDatabase = 'mcdev';
+
+/** Connection settings: MCDEV_DB_* / MCDEV_REDIS_HOST, defaulting to localhost and the main database's name. */
 export function env(): Env {
   const e = process.env;
   return {
     db: {
-      host: e.PARADISU_DB_HOST ?? 'localhost',
-      port: e.PARADISU_DB_PORT ?? '5432',
-      name: e.PARADISU_DB_NAME ?? 'paradisu',
-      user: e.PARADISU_DB_USER ?? 'paradisu',
-      password: e.PARADISU_DB_PASSWORD ?? 'paradisu',
+      host: e.MCDEV_DB_HOST ?? 'localhost',
+      port: e.MCDEV_DB_PORT ?? '5432',
+      name: e.MCDEV_DB_NAME ?? defaultDatabase,
+      user: e.MCDEV_DB_USER ?? defaultDatabase,
+      password: e.MCDEV_DB_PASSWORD ?? defaultDatabase,
     },
-    redisHost: e.PARADISU_REDIS_HOST ?? 'localhost',
+    redisHost: e.MCDEV_REDIS_HOST ?? 'localhost',
   };
+}
+
+/** Values used for everything a project does not set. */
+function defaults(): Record<string, unknown> {
+  return {
+    format: 1,
+    accept_eula: false,
+    public_host: 'localhost',
+    online_mode: true,
+    extensions: [],
+    versions: { minecraft: 'auto', auto: { catalog: 'gradle/libs.versions.toml', minecraft_from: 'paper-api', velocity_from: 'velocity-api' } },
+    build: { command: [], artifacts: [] },
+    java: { enhanced_redefinition: true, hotswap_agent: true, hotswap_plugins: [], extra_flags: [] },
+    redis: { enabled: false },
+    networks: [],
+    instances: [],
+    ui: { default_layout: 'network', session: basename(ROOT) },
+    web: { port: 8082, bind: '127.0.0.1' },
+    share: { provider: 'pinggy', targets: [], renew_before_seconds: 30, proxy_protocol: 'off', providers: {} },
+    capture: { enabled: false, gzip_level: 3, max_size: '512M', queue_capacity: 65536 },
+    plugins: [],
+  };
+}
+
+const LISTS: Record<string, string> = { instances: 'name', networks: 'name', plugins: 'key' };
+const INSTANCE_KEYS = new Set([
+  'name', 'type', 'enabled', 'network', 'port', 'public_port', 'debug_port', 'memory', 'version', 'build',
+  'first_start_commands', 'try', 'world_preset',
+]);
+
+/** Fills instance defaults and moves unknown keys into `extra`. */
+function normalizeInstance(raw: Record<string, unknown>): InstanceConfig {
+  const known: Record<string, unknown> = {};
+  const extra: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(raw)) (INSTANCE_KEYS.has(key) ? known : extra)[key] = value;
+  return {
+    enabled: true,
+    memory: '1G',
+    version: 'auto',
+    build: 'auto',
+    first_start_commands: [],
+    ...known,
+    extra,
+  } as unknown as InstanceConfig;
 }
 
 /** Loads .mcdevtools/config.toml and deep-merges .mcdevtools/config.local.toml (gitignored) on top. */
 export async function loadConfig(): Promise<DevConfig> {
   const basePath = join(CONFIG_DIR, 'config.toml');
   const localPath = join(CONFIG_DIR, 'config.local.toml');
+  if (!existsSync(basePath)) {
+    fail(`No .mcdevtools/config.toml in ${ROOT}. Run \`npx github:Paradisu/mcdevtools init\` to set the project up.`);
+  }
   let merged = parse(await readFile(basePath, 'utf8')) as Record<string, unknown>;
   if (existsSync(localPath)) {
     const local = parse(await readFile(localPath, 'utf8')) as Record<string, unknown>;
-    merged = mergeNamedLists(merged, local, ['servers', 'plugins']);
-    merged = deepMerge(merged, withoutKeys(local, ['servers', 'plugins']));
+    merged = mergeNamedLists(merged, local, Object.keys(LISTS));
+    merged = deepMerge(merged, withoutKeys(local, Object.keys(LISTS)));
   }
-  const config = merged as unknown as DevConfig;
-  const names = new Set<string>();
-  for (const server of config.servers) {
-    if (server.name === 'proxy' || server.name === 'limbo' || names.has(server.name)) {
-      fail(`Invalid or duplicate server name "${server.name}" in dev config`);
-    }
-    names.add(server.name);
+  const config = deepMerge(defaults(), merged) as unknown as DevConfig;
+  config.instances = ((merged.instances as Record<string, unknown>[] | undefined) ?? []).map(normalizeInstance);
+  config.networks = ((merged.networks as Partial<NetworkConfig>[] | undefined) ?? []).map((network) => ({ forwarding: 'auto', ...network }) as NetworkConfig);
+  config.plugins = (merged.plugins as PluginConfig[] | undefined) ?? [];
+  if (config.db) {
+    config.db = { kind: 'postgres', required: true, ...(config.db as Partial<DbConfig>) } as DbConfig;
+    defaultDatabase = config.db.databases[0] ?? defaultDatabase;
   }
   return config;
 }
@@ -194,8 +301,8 @@ function withoutKeys(obj: Record<string, unknown>, keys: string[]): Record<strin
 }
 
 /**
- * Arrays of tables ([[servers]], [[plugins]]) are merged by their name/key so a local file can flip
- * `enabled` on one server without restating it; entries that do not exist in the base are appended.
+ * Arrays of tables ([[instances]], [[networks]], [[plugins]]) are merged by their name/key so a local file can
+ * flip `enabled` on one instance without restating it; entries that do not exist in the base are appended.
  */
 function mergeNamedLists(
   base: Record<string, unknown>,
@@ -208,7 +315,7 @@ function mergeNamedLists(
     if (!overrides) {
       continue;
     }
-    const idKey = list === 'servers' ? 'name' : 'key';
+    const idKey = LISTS[list] ?? 'name';
     const merged = [...((base[list] as Record<string, unknown>[] | undefined) ?? [])];
     for (const override of overrides) {
       const index = merged.findIndex((entry) => entry[idKey] === override[idKey]);

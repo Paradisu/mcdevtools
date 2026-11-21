@@ -1,58 +1,52 @@
 import { randomBytes } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
-import { type DevConfig, type Env, type Platform, type ServerConfig, env } from './config.ts';
+import { basename, dirname, join } from 'node:path';
+import { type DevConfig, type Env, type InstanceConfig, type NetworkConfig, type Platform, env } from './config.ts';
+import { type PlatformDef, platformOf } from './platforms/index.ts';
+import { networkOf, proxiesOf, serversOf, varName } from './topology.ts';
 import { shareAddresses, shareProxyProtocol } from './share/state.ts';
-import { CORE_TEMPLATES, RUN, TEMPLATES, TEMPLATES_LOCAL, render } from './util.ts';
+import { CORE_TEMPLATES, ROOT, RUN, TEMPLATES, TEMPLATES_LOCAL, render } from './util.ts';
 
 export interface Instance {
-  /** `proxy` or the server name */
+  /** The instance name from the config; also its directory under run/ */
   name: string;
+  /** Plugin family of its platform (paper, velocity, limbo) */
   platform: Platform;
+  def: PlatformDef;
+  config: InstanceConfig;
   dir: string;
   port: number;
   debugPort: number;
   memory: string;
   firstStartCommands: string[];
   enabled: boolean;
-  server?: ServerConfig;
+  network?: NetworkConfig;
 }
 
 export function instancesOf(config: DevConfig): Instance[] {
-  const proxy: Instance = {
-    name: 'proxy',
-    platform: 'velocity',
-    dir: join(RUN, 'proxy'),
-    port: config.proxy.port,
-    debugPort: config.proxy.debug_port,
-    memory: config.proxy.memory,
-    firstStartCommands: config.proxy.first_start_commands,
-    enabled: true,
-  };
-  const limbo: Instance = {
-    name: 'limbo',
-    platform: 'limbo',
-    dir: join(RUN, 'limbo'),
-    port: config.limbo.port,
-    debugPort: config.limbo.debug_port,
-    memory: config.limbo.memory,
-    firstStartCommands: config.limbo.first_start_commands,
-    enabled: config.limbo.enabled,
-  };
-  const servers = config.servers.map<Instance>((server) => ({
-    name: server.name,
-    platform: 'paper',
-    dir: join(RUN, server.name),
-    port: server.port,
-    debugPort: server.debug_port,
-    memory: server.memory,
-    firstStartCommands: server.first_start_commands,
-    enabled: server.enabled,
-    server,
-  }));
-  return [proxy, limbo, ...servers];
+  return config.instances
+    .map<Instance>((entry) => {
+      const def = platformOf(entry.type);
+      return {
+        name: entry.name,
+        platform: def.family,
+        def,
+        config: entry,
+        dir: join(RUN, entry.name),
+        port: entry.port,
+        debugPort: entry.debug_port,
+        memory: entry.memory,
+        firstStartCommands: entry.first_start_commands,
+        enabled: entry.enabled,
+        network: networkOf(config, entry),
+      };
+    })
+    .sort((a, b) => a.def.startOrder - b.def.startOrder);
 }
+
+/** Directory of each layer's templates that applies to a plugin family */
+const BASE_TEMPLATE: Record<Platform, string> = { velocity: 'proxy', paper: 'paper-common', limbo: 'limbo' };
 
 const WORLD_PRESETS = {
   redstone_ready: {
@@ -67,55 +61,75 @@ const WORLD_PRESETS = {
   default: { levelType: 'minecraft\\:normal', generatorSettings: '' },
 } as const;
 
-async function forwardingSecret(): Promise<string> {
-  const path = join(RUN, 'forwarding.secret');
-  if (existsSync(path)) {
-    return (await readFile(path, 'utf8')).trim();
+/** The network's forwarding secret, generated on first use and shared by its proxy and backends. */
+async function forwardingSecret(network: string): Promise<{ secret: string; file: string }> {
+  const file = join(RUN, 'networks', network, 'forwarding.secret');
+  if (existsSync(file)) {
+    return { secret: (await readFile(file, 'utf8')).trim(), file };
   }
   const secret = randomBytes(24).toString('base64url');
-  await mkdir(RUN, { recursive: true });
-  await writeFile(path, secret);
-  return secret;
+  await mkdir(dirname(file), { recursive: true });
+  await writeFile(file, secret);
+  return { secret, file };
 }
 
-/** Variables available to every template as ${NAME}. */
+export type TemplateVarProvider = (
+  config: DevConfig,
+  instance: Instance,
+  base: Record<string, string>,
+) => Record<string, string> | Promise<Record<string, string>>;
+
+const varProviders: TemplateVarProvider[] = [];
+
+/** Adds variables to every template (extensions call this through `api.registerTemplateVars`); later providers win. */
+export function registerTemplateVars(provider: TemplateVarProvider): void {
+  varProviders.push(provider);
+}
+
+/**
+ * Variables available to every template as ${NAME}: this instance (SERVER_NAME, SERVER_PORT, PROXY_PORT), its
+ * network (ONLINE_MODE, FORWARDING_*, VELOCITY_*), the database, and PUBLIC_HOST_<NAME> / PUBLIC_PORT_<NAME> of every
+ * instance (a live `dev share` tunnel replaces the configured public address).
+ */
 export async function templateVars(config: DevConfig, instance: Instance): Promise<Record<string, string>> {
   const e: Env = env();
-  const preset = WORLD_PRESETS[instance.server?.world_preset ?? 'default'];
-  const velocityServers = config.servers
-    .filter((server) => server.enabled)
-    .map((server) => `${server.name} = "127.0.0.1:${server.port}"`)
-    .join('\n');
-  const velocityTry = config.servers.filter((server) => server.enabled && server.try).map((server) => `"${server.name}"`);
-  // Live `dev share` tunnels replace the configured public address
+  const preset = WORLD_PRESETS[instance.config.world_preset ?? 'default'];
+  const network = instance.network;
+  const velocityServers = network ? serversOf(config, network.name) : [];
+  const velocityTry = velocityServers.filter((server) => server.try);
+  const proxy = network ? proxiesOf(config, network.name)[0] : undefined;
+  const forwarding = network ? await forwardingSecret(network.name) : { secret: '', file: '' };
   const shared = shareAddresses();
-  return {
-    PROXY_PORT: String(config.proxy.port),
-    HAPROXY_PROTOCOL: String(shareProxyProtocol()),
-    PROXY_PUBLIC_HOST: shared.proxy?.host ?? config.public_host,
-    PROXY_PUBLIC_PORT: String(shared.proxy?.port ?? config.proxy.public_port ?? config.proxy.port),
+  const publicAddresses: Record<string, string> = {};
+  for (const other of config.instances) {
+    publicAddresses[`PUBLIC_HOST_${varName(other.name)}`] = shared[other.name]?.host ?? config.public_host;
+    publicAddresses[`PUBLIC_PORT_${varName(other.name)}`] = String(shared[other.name]?.port ?? other.public_port ?? other.port);
+  }
+  const vars: Record<string, string> = {
+    ...publicAddresses,
+    PROXY_PORT: String(instance.def.role === 'proxy' ? instance.port : (proxy?.port ?? '')),
+    HAPROXY_PROTOCOL: String(shareProxyProtocol(instance.name)),
     PUBLIC_HOST: config.public_host,
-    LIMBO_PORT: String(config.limbo.port),
-    LIMBO_PUBLIC_HOST: shared.limbo?.host ?? config.public_host,
-    LIMBO_PUBLIC_PORT: String(shared.limbo?.port ?? config.limbo.public_port ?? config.limbo.port),
+    PROJECT_NAME: basename(ROOT),
     SERVER_NAME: instance.name,
     SERVER_PORT: String(instance.port),
-    ONLINE_MODE: String(config.online_mode),
-    FORWARDING_SECRET: await forwardingSecret(),
+    ONLINE_MODE: String(network?.online_mode ?? config.online_mode),
+    FORWARDING_MODE: 'modern',
+    FORWARDING_SECRET: forwarding.secret,
+    FORWARDING_SECRET_FILE: forwarding.file,
     DB_HOST: e.db.host,
     DB_NAME: e.db.name,
     DB_USER: e.db.user,
     DB_PASSWORD: e.db.password,
     DB_URL: `jdbc:postgresql://${e.db.host}:${e.db.port}/${e.db.name}`,
     REDIS_HOST: e.redisHost,
-    CONTEXT_SERVER: instance.server?.context.server ?? '',
-    CONTEXT_WARP: instance.server?.context.warp ?? '',
-    CONTEXT_INVENTORY: instance.server?.context.inventory ?? '',
     LEVEL_TYPE: preset.levelType,
     GENERATOR_SETTINGS: preset.generatorSettings,
-    VELOCITY_SERVERS: velocityServers,
-    VELOCITY_TRY: `[${velocityTry.join(', ')}]`,
+    VELOCITY_SERVERS: velocityServers.map((server) => `${server.name} = "127.0.0.1:${server.port}"`).join('\n'),
+    VELOCITY_TRY: `[${velocityTry.map((server) => `"${server.name}"`).join(', ')}]`,
   };
+  for (const provider of varProviders) Object.assign(vars, await provider(config, instance, vars));
+  return vars;
 }
 
 async function overlay(from: string, to: string, vars: Record<string, string>): Promise<void> {
@@ -144,7 +158,7 @@ export async function applyTemplates(
   installedPlugins: string[],
 ): Promise<void> {
   const vars = await templateVars(config, instance);
-  const base = { velocity: 'proxy', paper: 'paper-common', limbo: 'limbo' }[instance.platform];
+  const base = BASE_TEMPLATE[instance.platform];
   // Layers, later ones win: templates shipped with mcdevtools, the project's (.mcdevtools/templates), then
   // personal overrides (.mcdevtools/templates.local, exported by profiles). Each has the same layout.
   for (const layer of [CORE_TEMPLATES, TEMPLATES, TEMPLATES_LOCAL]) {

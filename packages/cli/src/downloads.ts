@@ -4,7 +4,9 @@ import { existsSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 import type { DevConfig, Platform, PluginConfig } from './config.ts';
 import { CACHE, ROOT, download, fail, log, sha256File, warn } from './util.ts';
-import { resolvePlugin, resolveServers } from './versions.ts';
+import { type PlatformDef, platformOf } from './platforms/index.ts';
+import type { ResolveCtx, ServerArtifact } from './platforms/index.ts';
+import { readCatalog, resolveMinecraft, resolvePlugin } from './versions.ts';
 import type { Artifact } from './versions.ts';
 import { ensureProtocol } from './capture/protocol.ts';
 
@@ -17,11 +19,17 @@ export interface ResolvedArtifact {
   sha256: string;
 }
 
+/** A downloaded server jar; `type` is the platform type it was resolved for */
+export interface ResolvedServer extends ResolvedArtifact {
+  type: string;
+  version: string;
+  build?: string;
+}
+
 export interface ResolvedFiles {
   minecraft: string;
-  purpur: ResolvedArtifact & { build: string };
-  velocity: ResolvedArtifact & { version: string; build: string };
-  limbo?: ResolvedArtifact & { version: string };
+  /** By instance name; only instances that were enabled at `setup` */
+  servers: Record<string, ResolvedServer>;
   plugins: (ResolvedArtifact & {
     key: string;
     platform: Platform;
@@ -40,7 +48,7 @@ function pinFailureHint(plugin: PluginConfig, platform: Platform, message: strin
 
 export async function readResolved(): Promise<ResolvedFiles> {
   if (!existsSync(RESOLVED)) {
-    fail('Nothing downloaded yet. Run `dev setup` first.');
+    fail('Nothing downloaded yet. Run `mcdev setup` first.');
   }
   const resolved = JSON.parse(await readFile(RESOLVED, 'utf8')) as ResolvedFiles;
   // Paths were recorded as absolute; the checkout may have moved since (devcontainer /workspaces vs a host path)
@@ -49,9 +57,7 @@ export async function readResolved(): Promise<ResolvedFiles> {
     const at = file.lastIndexOf(marker);
     return at === -1 ? file : join(CACHE, file.slice(at + marker.length));
   };
-  resolved.purpur.file = relocate(resolved.purpur.file);
-  resolved.velocity.file = relocate(resolved.velocity.file);
-  if (resolved.limbo) resolved.limbo.file = relocate(resolved.limbo.file);
+  for (const server of Object.values(resolved.servers ?? {})) server.file = relocate(server.file);
   for (const plugin of resolved.plugins) plugin.file = relocate(plugin.file);
   return resolved;
 }
@@ -65,32 +71,47 @@ async function fetchArtifact(artifact: Artifact, subdir: string, fileName: strin
   return { file: dest, note: 'cached' };
 }
 
-/** Resolves versions, downloads everything into dev/.cache and records the result in resolved.json. */
+/** Resolves versions, downloads everything into .mcdevtools/.cache and records the result in resolved.json. */
 export async function setup(config: DevConfig, refresh: boolean): Promise<void> {
   step('Resolving versions');
-  const servers = await resolveServers(config);
-  log(`Minecraft ${servers.minecraft}`);
+  const minecraft = await resolveMinecraft(config);
+  log(`Minecraft ${minecraft}`);
+  let catalog: Promise<Record<string, string>> | undefined;
+  const ctx: ResolveCtx = {
+    config,
+    minecraft: async () => minecraft,
+    catalog: () => (catalog ??= readCatalog(config)),
+  };
 
   step('Servers');
-  const serverRow = streamRow([{ min: 8 }, { min: 14 }, {}]);
-  const purpur = await fetchArtifact(servers.purpur, 'servers', servers.purpur.name, false);
-  const purpurFile = purpur.file;
-  log(`  ${serverRow(['Purpur', `build ${servers.purpur.build}`, purpur.note])}`);
-  const velocity = await fetchArtifact(
-    servers.velocity,
-    'servers',
-    `velocity-${servers.velocity.version}-${servers.velocity.build}.jar`,
-    false,
-  );
-  const velocityFile = velocity.file;
-  log(`  ${serverRow(['Velocity', `${servers.velocity.version} build ${servers.velocity.build}`, velocity.note])}`);
-
-  let limbo: ResolvedFiles['limbo'];
-  if (servers.limbo) {
-    const limboFetch = await fetchArtifact(servers.limbo, 'servers', servers.limbo.name, false);
-    const limboFile = limboFetch.file;
-    log(`  ${serverRow(['Limbo', servers.limbo.version, limboFetch.note])}`);
-    limbo = { version: servers.limbo.version, file: limboFile, url: servers.limbo.url, sha256: sha256File(limboFile) };
+  const enabled = config.instances.filter((instance) => instance.enabled);
+  const serverRow = streamRow([{ min: Math.max(8, ...enabled.map((instance) => instance.name.length)) }, { min: 8 }, { min: 14 }, {}]);
+  const servers: ResolvedFiles['servers'] = {};
+  // Instances of the same type, version and build share one download
+  const shared = new Map<string, Promise<{ artifact: ServerArtifact; file: string; note: string }>>();
+  for (const instance of enabled) {
+    const def: PlatformDef = platformOf(instance.type);
+    const key = `${instance.type}|${instance.version}|${instance.build}`;
+    if (!shared.has(key)) {
+      shared.set(
+        key,
+        (async () => {
+          const artifact = await def.resolve(ctx, instance);
+          const fetched = await fetchArtifact(artifact, 'servers', def.cacheName(artifact), false);
+          return { artifact, ...fetched };
+        })(),
+      );
+    }
+    const { artifact, file, note } = await shared.get(key)!;
+    servers[instance.name] = {
+      type: instance.type,
+      version: artifact.version,
+      build: artifact.build,
+      file,
+      url: artifact.url,
+      sha256: sha256File(file),
+    };
+    log(`  ${serverRow([instance.name, def.label, artifact.build ? `${artifact.version} #${artifact.build}` : artifact.version, note])}`);
   }
 
   step('Plugins');
@@ -155,7 +176,7 @@ export async function setup(config: DevConfig, refresh: boolean): Promise<void> 
           log(`  ${pluginRow([label, pin.version, pin.file ? 'pinned, local file' : `pinned, ${pinned.note}`])}`);
           continue;
         }
-        const artifact = await resolvePlugin(plugin, platform, servers.minecraft);
+        const artifact = await resolvePlugin(plugin, platform, minecraft);
         // URL sources have no checksum, so they are re-downloaded on --refresh only
         const fetched = await fetchArtifact(
           artifact,
@@ -182,19 +203,7 @@ export async function setup(config: DevConfig, refresh: boolean): Promise<void> 
   }
 
   await mkdir(CACHE, { recursive: true });
-  const resolved: ResolvedFiles = {
-    minecraft: servers.minecraft,
-    purpur: { build: servers.purpur.build, file: purpurFile, url: servers.purpur.url, sha256: sha256File(purpurFile) },
-    velocity: {
-      version: servers.velocity.version,
-      build: servers.velocity.build,
-      file: velocityFile,
-      url: servers.velocity.url,
-      sha256: sha256File(velocityFile),
-    },
-    limbo,
-    plugins,
-  };
+  const resolved: ResolvedFiles = { minecraft, servers, plugins };
   await writeFile(RESOLVED, JSON.stringify(resolved, null, 2));
 
   if (failures.length > 0) {
@@ -208,7 +217,7 @@ export async function setup(config: DevConfig, refresh: boolean): Promise<void> 
     try {
       await ensureProtocol(config, refresh);
     } catch (error) {
-      warn(`Could not generate the capture packet table (${(error as Error).message}); run \`dev capture protocol\` later`);
+      warn(`Could not generate the capture packet table (${(error as Error).message}); run \`mcdev capture protocol\` later`);
     }
   }
   log('Setup complete.');

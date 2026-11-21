@@ -15,6 +15,9 @@ import { CAPTURE_COMMANDS } from './capture/commands.ts';
 import { configDataVersion, fixtureCommand, mcCommands } from './mc/commands.ts';
 import { askOptional, askText, disableInput, interactive, isPromptExit, pickFrom, pickInstance, pickInstances } from './prompt.ts';
 import type { Instance } from './templates.ts';
+import { platformOf } from './platforms/index.ts';
+import { validateTopology } from './topology.ts';
+import { migrateConfigCommand } from './legacy-config.ts';
 import { dim, step } from './output.ts';
 import { commandHelp, groupOf, menuChoices, usage as helpUsage } from './help.ts';
 import { CONFIG_DIR, DevError, ROOT, capture, fail, log, warn } from './util.ts';
@@ -87,7 +90,15 @@ const COMMANDS: Command[] = [
       return setup(config, values.refresh ?? false);
     },
   },
-  { name: 'build', usage: '', summary: 'Build the plugin jar', run: () => instances.build() },
+  {
+    name: 'config migrate',
+    usage: '<file>',
+    summary: 'Convert an old dev.toml to the instances format',
+    details: 'Reads a dev.toml or dev.local.toml from before mcdevtools (proxy, limbo, servers, purpur_build) and prints it in the instances format.',
+    options: [{ flag: '--out <file>', summary: 'Write the result to a file instead of printing it' }],
+    run: (_ctx, args) => migrateConfigCommand(args),
+  },
+  { name: 'build', usage: '', summary: 'Build the project and the capture plugin', run: ({ config }) => instances.build(config) },
   {
     name: 'start',
     usage: '[names...]',
@@ -294,7 +305,7 @@ function registerConfigCommands(config: DevConfig): void {
     fixtureCommand(),
     ...mcCommands(
       () => configDataVersion(config),
-      () => config.servers.filter((server) => server.enabled).map((server) => server.name),
+      () => config.instances.filter((i) => i.enabled && platformOf(i.type).worlds).map((i) => i.name),
     ),
   );
 }
@@ -329,7 +340,13 @@ async function main(argv: string[]): Promise<void> {
     disableInput();
     argv = argv.filter((arg) => arg !== '--no-input');
   }
+  if (argv[0] === 'config' && argv[1] === 'migrate' && !argv.includes('--help')) {
+    // Runs before a project config exists: it is what produces one
+    await migrateConfigCommand(argv.slice(2));
+    return;
+  }
   const config = await loadConfig();
+  validateTopology(config);
   registerConfigCommands(config);
   if (argv[0] === 'help' || argv[0] === '--help' || argv[0] === '-h') {
     const topic = find(argv.slice(1));
@@ -391,11 +408,14 @@ function ensureGradleCachesWritable(): void {
 async function bootstrap(config: DevConfig): Promise<void> {
   const { run } = await import('./util.ts');
   const steps: [string, () => Promise<void> | void][] = [
-    ['Building the plugin jars', () => run('./gradlew', ['-q', 'shadowJar', ':devtools:capture:jar'])],
+    ['Building the project', () => instances.build(config)],
     ['Downloading servers and plugins', () => setup(config, false)],
     [
       'Preparing the database',
       async () => {
+        if (!config.db) {
+          return;
+        }
         if (!db.dbReachable()) {
           throw new DevError('PostgreSQL is not reachable');
         }

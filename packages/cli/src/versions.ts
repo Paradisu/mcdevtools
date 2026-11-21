@@ -1,11 +1,11 @@
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parse } from 'smol-toml';
 import type { DevConfig, Platform, PluginConfig } from './config.ts';
+import { FAMILIES } from './platforms/families.ts';
 import { ROOT, fail, getJson } from './util.ts';
 
-const FILL = 'https://fill.papermc.io/v3/projects';
-const PURPUR = 'https://api.purpurmc.org/v2/purpur';
 const MODRINTH = 'https://api.modrinth.com/v2';
 
 export interface Artifact {
@@ -16,15 +16,6 @@ export interface Artifact {
   sha512?: string;
 }
 
-export interface ResolvedServers {
-  minecraft: string;
-  /** Purpur, a Paper fork; plugins still target the "paper" platform */
-  purpur: Artifact & { build: string };
-  velocity: Artifact & { version: string; build: string };
-  /** Only resolved when limbo.enabled */
-  limbo?: Artifact & { version: string };
-}
-
 export interface ResolvedPlugin extends Artifact {
   key: string;
   platform: Platform;
@@ -32,117 +23,40 @@ export interface ResolvedPlugin extends Artifact {
   version: string;
 }
 
-interface FillBuild {
-  id: number;
-  downloads: Record<string, { name: string; url: string; checksums: { sha256: string } }>;
-}
-
-async function catalog(): Promise<Record<string, string>> {
-  const toml = parse(await readFile(join(ROOT, 'gradle', 'libs.versions.toml'), 'utf8')) as {
-    versions: Record<string, string>;
-  };
-  return toml.versions;
-}
-
-function fillArtifact(build: FillBuild): Artifact {
-  const download = build.downloads['server:default'];
-  if (!download) {
-    fail(`Fill build ${build.id} has no server:default download`);
+/** The `[versions]` of the project's Gradle version catalog; empty when it has none. */
+export async function readCatalog(config: DevConfig): Promise<Record<string, string>> {
+  const path = join(ROOT, config.versions.auto.catalog);
+  if (!existsSync(path)) {
+    return {};
   }
-  return { name: download.name, url: download.url, sha256: download.checksums.sha256 };
+  const toml = parse(await readFile(path, 'utf8')) as { versions?: Record<string, string> };
+  return toml.versions ?? {};
 }
 
-interface PurpurBuilds {
-  builds: { latest: string; all: string[] };
+/** [versions].minecraft, or the version in the catalog's paper-api ("1.21.4-R0.1-SNAPSHOT", "1.21.8.build.N-beta"). */
+export async function resolveMinecraft(config: DevConfig): Promise<string> {
+  if (config.versions.minecraft !== 'auto') {
+    return config.versions.minecraft;
+  }
+  const key = config.versions.auto.minecraft_from;
+  const api = (await readCatalog(config))[key];
+  if (!api) {
+    fail(`Cannot derive the Minecraft version: ${key} is not in ${config.versions.auto.catalog}. Set minecraft = "<version>" under [versions].`);
+  }
+  const match = /^(?<mc>.+?)\.build\.\d+/.exec(api);
+  if (!match?.groups?.mc) {
+    fail(`Could not derive the Minecraft version from ${key} "${api}"; set minecraft under [versions].`);
+  }
+  return match.groups.mc;
 }
 
-interface PurpurBuild {
-  build: string;
-  result: string;
-  md5: string;
-}
-
-async function resolveLimbo(minecraft: string, wanted: string): Promise<Artifact & { version: string }> {
-  // Limbo releases are built for exactly one Minecraft version
-  const candidates = await modrinthVersions('limbo-server', ['java-agent'], [minecraft]);
-  const pick = wanted === 'auto' ? candidates[0] : candidates.find((candidate) => candidate.version_number === wanted);
-  if (!pick) {
-    fail(
-      `No Limbo build on Modrinth for Minecraft ${minecraft}${wanted === 'auto' ? '' : ` matching "${wanted}"`}. ` +
-        'Set limbo.enabled = false, or pin limbo_version to a build you provide.',
-    );
-  }
-  const file = pick.files.find((candidate) => candidate.primary) ?? pick.files[0];
-  if (!file) {
-    fail(`Limbo ${pick.version_number} has no files`);
-  }
-  return { name: file.filename, url: file.url, sha512: file.hashes.sha512, version: pick.version_number };
-}
-
-async function purpurBuildFor(minecraft: string, wanted: string): Promise<Artifact & { build: string }> {
-  let versions: PurpurBuilds;
-  try {
-    versions = await getJson<PurpurBuilds>(`${PURPUR}/${minecraft}`);
-  } catch (error) {
-    const index = await getJson<{ versions: string[] }>(PURPUR);
-    fail(`${(error as Error).message}\nPurpur has no ${minecraft} yet. Latest versions: ${index.versions.slice(-5).join(', ')}`);
-  }
-  const build = wanted === 'auto' || wanted === 'latest' ? versions.builds.latest : wanted;
-  const info = await getJson<PurpurBuild>(`${PURPUR}/${minecraft}/${build}`);
-  if (info.result !== 'SUCCESS') {
-    fail(`Purpur ${minecraft} build ${build} did not succeed (${info.result})`);
-  }
-  return {
-    name: `purpur-${minecraft}-${build}.jar`,
-    url: `${PURPUR}/${minecraft}/${build}/download`,
-    md5: info.md5,
-    build,
-  };
-}
-
-/** Resolves the Purpur and Velocity builds that match gradle/libs.versions.toml (or the config overrides). */
-export async function resolveServers(config: DevConfig): Promise<ResolvedServers> {
-  const versions = await catalog();
-
-  const paperApi = versions['paper-api'] ?? fail('paper-api is missing from libs.versions.toml');
-  const paperMatch = /^(?<mc>.+?)\.build\.\d+/.exec(paperApi);
-  const minecraft = config.minecraft_version === 'auto' ? paperMatch?.groups?.mc : config.minecraft_version;
-  if (!minecraft) {
-    fail(`Could not derive the Minecraft version from paper-api "${paperApi}"`);
-  }
-  const purpurBuild = await purpurBuildFor(minecraft, config.purpur_build);
-
-  const velocityApi = versions['velocity-api'] ?? fail('velocity-api is missing from libs.versions.toml');
-  const velocityVersion =
-    config.velocity_version === 'auto' ? `${velocityApi.split('-')[0]}-SNAPSHOT` : config.velocity_version;
-  let velocity: FillBuild;
-  try {
-    velocity = await getJson<FillBuild>(
-      `${FILL}/velocity/versions/${velocityVersion}/builds/${config.velocity_build === 'auto' ? 'latest' : config.velocity_build}`,
-    );
-  } catch (error) {
-    const index = await getJson<{ versions: Record<string, string[]> }>(`${FILL}/velocity`);
-    const available = Object.values(index.versions).flat().join(', ');
-    fail(`${(error as Error).message}\nVelocity ${velocityVersion} not found. Available: ${available}`);
-  }
-
-  const limbo = config.limbo.enabled ? await resolveLimbo(minecraft, config.limbo_version) : undefined;
-
-  return {
-    minecraft,
-    limbo,
-    purpur: purpurBuild,
-    velocity: { ...fillArtifact(velocity), version: velocityVersion, build: String(velocity.id) },
-  };
-}
-
-interface ModrinthVersion {
+export interface ModrinthVersion {
   version_number: string;
   version_type: 'release' | 'beta' | 'alpha';
   files: { url: string; filename: string; primary: boolean; hashes: { sha512: string } }[];
 }
 
-async function modrinthVersions(slug: string, loaders: string[], gameVersions?: string[]): Promise<ModrinthVersion[]> {
+export async function modrinthVersions(slug: string, loaders: string[], gameVersions?: string[]): Promise<ModrinthVersion[]> {
   const params = new URLSearchParams({ loaders: JSON.stringify(loaders) });
   if (gameVersions) {
     params.set('game_versions', JSON.stringify(gameVersions));
@@ -152,12 +66,11 @@ async function modrinthVersions(slug: string, loaders: string[], gameVersions?: 
 
 async function resolveModrinth(plugin: PluginConfig, platform: Platform, minecraft: string): Promise<ResolvedPlugin> {
   const slug = plugin.slug ?? plugin.key;
-  // Modrinth ORs values inside an array, so paper plugins that only tag spigot/bukkit are found too
-  const loaders =
-    platform === 'paper' ? ['purpur', 'paper', 'spigot', 'bukkit'] : platform === 'limbo' ? ['java-agent'] : ['velocity'];
+  const family = FAMILIES[platform];
+  const loaders = family.modrinthLoaders;
 
   let candidates = await modrinthVersions(slug, loaders, [minecraft]);
-  if (candidates.length === 0 && platform === 'paper') {
+  if (candidates.length === 0 && family.tagsMinecraft) {
     for (const fallback of plugin.game_version_fallback ?? []) {
       candidates = await modrinthVersions(slug, loaders, [fallback]);
       if (candidates.length > 0) {
@@ -165,14 +78,14 @@ async function resolveModrinth(plugin: PluginConfig, platform: Platform, minecra
       }
     }
   }
-  if (candidates.length === 0 && platform !== 'paper') {
+  if (candidates.length === 0 && !family.tagsMinecraft) {
     // Many Velocity and Limbo plugins do not tag Minecraft versions at all
     candidates = await modrinthVersions(slug, loaders);
   }
   if (candidates.length === 0) {
     fail(
       `No ${platform} build of "${slug}" on Modrinth for Minecraft ${minecraft}` +
-        (platform === 'paper' ? ' (add game_version_fallback = ["..."] to allow an older tag)' : ''),
+        (family.tagsMinecraft ? ' (add game_version_fallback = ["..."] to allow an older tag)' : ''),
     );
   }
 

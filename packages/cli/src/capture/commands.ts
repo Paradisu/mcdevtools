@@ -33,7 +33,7 @@ import {
   pickInstancesOf,
   recordingFlags,
 } from './wizard.ts';
-import { linkOf, receiverOf } from './receivers.ts';
+import { linkOf, proxyNames, receiverOf } from './receivers.ts';
 import {
   type Capture,
   type CaptureMeta,
@@ -578,7 +578,8 @@ async function captureFilterSource(ctx: Ctx, capture: Capture, names: string[], 
     }
   }
   // client and proxy first, then the servers
-  const order = (name: string) => (name === 'client' ? 0 : name === 'proxy' ? 1 : 2);
+  const proxies = proxyNames(ctx.config);
+  const order = (name: string) => (name === 'client' ? 0 : proxies.has(name) ? 1 : 2);
   const sorted = [...receivers].sort((a, b) => order(a) - order(b) || a.localeCompare(b));
   return { table: table_, receivers: sorted, players: [...players], conns };
 }

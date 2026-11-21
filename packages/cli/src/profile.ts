@@ -10,6 +10,7 @@ import { bold, formatBytes, keyValue, next, relPath, status as statusWord, table
 import { isRunning } from './supervisor.ts';
 import { askText, confirmAction, interactive, pickFrom, pickMany, searchFrom } from './prompt.ts';
 import { instancesOf } from './templates.ts';
+import { convertLegacyConfig } from './legacy-config.ts';
 import { CACHE, CONFIG_DIR, DevError, ROOT, RUN, TEMPLATES_LOCAL, capture, fail, log, warn } from './util.ts';
 
 /**
@@ -26,7 +27,8 @@ import { CACHE, CONFIG_DIR, DevError, ROOT, RUN, TEMPLATES_LOCAL, capture, fail,
  * screen lists the things that can run code (plugin download hosts, JVM flags, first-start commands).
  */
 
-const FORMAT = 1;
+/** 1: fixed proxy/limbo/servers settings (read by converting them); 2: per-instance versions and builds */
+const FORMAT = 2;
 const PROFILES = join(CONFIG_DIR, 'profiles');
 const SECTIONS = ['plugins', 'servers', 'overrides', 'db', 'worlds'] as const;
 type Section = (typeof SECTIONS)[number];
@@ -45,9 +47,12 @@ interface Manifest {
   includes: Section[];
   servers?: {
     minecraft: string;
-    purpur_build: string;
-    velocity_version: string;
-    velocity_build: string;
+    /** Format 2 */
+    instances?: { name: string; type: string; version: string; build?: string }[];
+    /** Format 1 */
+    purpur_build?: string;
+    velocity_version?: string;
+    velocity_build?: string;
     limbo_version?: string;
     data_version?: number;
   };
@@ -96,20 +101,18 @@ function worldDirsOf(server: string): string[] {
 
 /** The settings a profile carries, from the effective config. Machine-specific keys never leave the machine, and `share` (tunnel tokens) is never included. */
 function profileSettings(config: DevConfig, resolved: Awaited<ReturnType<typeof readResolved>>): Json {
-  const { public_port: _p, ...proxy } = config.proxy;
-  const { public_port: _l, ...limbo } = config.limbo;
+  // Every instance pins the exact version and build that was downloaded
+  const instances = config.instances.map(({ public_port: _p, extra, ...rest }) => {
+    const server = resolved.servers[rest.name];
+    return { ...rest, ...extra, ...(server ? { version: server.version, ...(server.build ? { build: server.build } : {}) } : {}) };
+  });
   return {
-    minecraft_version: resolved.minecraft,
-    purpur_build: resolved.purpur.build,
-    velocity_version: resolved.velocity.version,
-    velocity_build: resolved.velocity.build,
-    ...(resolved.limbo ? { limbo_version: resolved.limbo.version } : {}),
+    versions: { minecraft: resolved.minecraft },
     online_mode: config.online_mode,
-    jvm: config.jvm,
-    proxy,
-    limbo,
+    java: config.java,
     ui: config.ui,
-    servers: config.servers,
+    networks: config.networks,
+    instances,
   };
 }
 
@@ -120,7 +123,7 @@ export async function exportProfile(config: DevConfig, options: ExportOptions): 
   mkdirSync(stage, { recursive: true });
   const resolved = await readResolved();
   if (resolved.plugins.some((plugin) => !plugin.sha256)) {
-    fail('dev/.cache/resolved.json was written by an older version of the dev tool; run `dev setup` and export again');
+    fail('.mcdevtools/.cache/resolved.json was written by an older version of mcdevtools; run `mcdev setup` and export again');
   }
 
   const manifest: Manifest = {
@@ -138,10 +141,7 @@ export async function exportProfile(config: DevConfig, options: ExportOptions): 
     Object.assign(settings, profileSettings(config, resolved));
     manifest.servers = {
       minecraft: resolved.minecraft,
-      purpur_build: resolved.purpur.build,
-      velocity_version: resolved.velocity.version,
-      velocity_build: resolved.velocity.build,
-      limbo_version: resolved.limbo?.version,
+      instances: Object.entries(resolved.servers).map(([name, server]) => ({ name, type: server.type, version: server.version, build: server.build })),
     };
     try {
       const { dataVersion } = await import('./mc/dataversion.ts');
@@ -196,11 +196,12 @@ export async function exportProfile(config: DevConfig, options: ExportOptions): 
   if (include.has('db')) {
     if (!dbReachable()) fail('PostgreSQL is not reachable; cannot export the database');
     mkdirSync(join(stage, 'db'), { recursive: true });
-    const databases = ['paradisu'];
-    dumpDatabase(join(stage, 'db', 'paradisu.dump'), 'paradisu');
-    if (capture('psql', ['-X', '-tAc', "select 1 from pg_database where datname = 'luckperms'"], { env: { PGDATABASE: 'postgres' } }).stdout.trim() === '1') {
-      dumpDatabase(join(stage, 'db', 'luckperms.dump'), 'luckperms');
-      databases.push('luckperms');
+    const databases: string[] = [];
+    for (const database of config.db?.databases ?? []) {
+      // Secondary databases are created by the devcontainer; skip the ones this machine lacks
+      if (databases.length > 0 && capture('psql', ['-X', '-tAc', `select 1 from pg_database where datname = '${database}'`], { env: { PGDATABASE: 'postgres' } }).stdout.trim() !== '1') continue;
+      dumpDatabase(join(stage, 'db', `${database}.dump`), database);
+      databases.push(database);
     }
     manifest.db = { changelogs: appliedChangelogs().map((file) => basename(file, '.xml')), databases };
   }
@@ -294,8 +295,9 @@ export async function inspectProfile(file: string): Promise<Manifest> {
 }
 
 /** Changelog numbers in this checkout, read from migrations.xml (no Gradle build needed). */
-function localChangelogs(): string[] {
-  const master = readFileSync(join(ROOT, 'database', 'src', 'main', 'resources', 'db', 'migrations.xml'), 'utf8');
+function localChangelogs(config: DevConfig): string[] {
+  const migrations = config.db?.migrations ?? fail('This project has no [db.migrations] to compare changelogs with');
+  const master = readFileSync(join(ROOT, migrations.search_path, migrations.changelog), 'utf8');
   return [...master.matchAll(/file="[^"]*?([\w-]+)\.xml"/g)].map((match) => match[1]!);
 }
 
@@ -313,14 +315,20 @@ function reviewText(manifest: Manifest, settings: Json | undefined): string {
   rows.push(['by', `${manifest.created_by}, ${manifest.created_at.slice(0, 10)}, commit ${manifest.source_commit}`]);
   rows.push(['replaces', manifest.includes.join(', ') || 'nothing']);
   if (manifest.servers) {
-    rows.push(['servers', `Minecraft ${manifest.servers.minecraft}, Purpur build ${manifest.servers.purpur_build}, Velocity ${manifest.servers.velocity_version} build ${manifest.servers.velocity_build}`]);
+    const { servers } = manifest;
+    rows.push([
+      'servers',
+      servers.instances
+        ? `Minecraft ${servers.minecraft}; ${servers.instances.map((i) => `${i.name} ${i.type} ${i.version}${i.build ? ` build ${i.build}` : ''}`).join(', ')}`
+        : `Minecraft ${servers.minecraft}, Purpur build ${servers.purpur_build}, Velocity ${servers.velocity_version} build ${servers.velocity_build}`,
+    ]);
   }
   if (manifest.plugins) {
     const hosts = new Set(manifest.plugins.filter((p) => !p.embedded && p.url).map((p) => hostOf(p.url!)));
     const embedded = manifest.plugins.filter((p) => p.embedded).length;
     rows.push(['plugins', `${manifest.plugins.length} jars, from ${[...hosts].join(', ') || 'nowhere'}${embedded > 0 ? `, ${embedded} embedded` : ''}`]);
   }
-  const flags = (settings?.jvm as { extra_flags?: string[] } | undefined)?.extra_flags ?? [];
+  const flags = ((settings?.java ?? settings?.jvm) as { extra_flags?: string[] } | undefined)?.extra_flags ?? [];
   if (flags.length > 0) rows.push(['jvm flags', flags.join(' ')]);
   if (manifest.db) rows.push(['database', `${manifest.db.databases.join(', ')} at changelogs ${manifest.db.changelogs.join(', ')}`]);
   if (manifest.worlds) rows.push(['worlds', manifest.worlds.map((w) => `${w.server} (${w.dirs.join(', ')})`).join('; ')]);
@@ -332,6 +340,7 @@ function reviewText(manifest: Manifest, settings: Json | undefined): string {
   collect('proxy', settings?.proxy);
   collect('limbo', settings?.limbo);
   for (const server of (settings?.servers as { name: string }[] | undefined) ?? []) collect(server.name, server);
+  for (const instance of (settings?.instances as { name: string }[] | undefined) ?? []) collect(instance.name, instance);
   const lines = [bold(`Profile "${manifest.name}"`), keyValue(rows)];
   if (commands.length > 0) lines.push('', bold('First-start commands'), ...commands);
   return lines.join('\n');
@@ -357,7 +366,13 @@ export async function importProfile(ctx: Ctx, file: string, options: ImportOptio
   tar(['-xzf', file, '-C', extract, '--no-same-owner', '--no-same-permissions']);
   try {
     const settingsPath = join(extract, 'config', 'dev.local.toml');
-    const settings = existsSync(settingsPath) ? (parse(readFileSync(settingsPath, 'utf8')) as Json) : undefined;
+    let settings = existsSync(settingsPath) ? (parse(readFileSync(settingsPath, 'utf8')) as Json) : undefined;
+    if (settings && manifest.format < 2) {
+      // Profiles from before the extraction carry proxy/limbo/servers settings
+      const converted = convertLegacyConfig(settings);
+      for (const note of converted.notes) warn(`profile: ${note}`);
+      settings = converted.config;
+    }
     for (const world of manifest.worlds ?? []) {
       if (!/^[A-Za-z0-9_-]+$/.test(world.server)) fail(`Unsafe server name "${world.server}" in the profile`);
       validateTarArchive(join(extract, world.file), `worlds/${world.server}`);
@@ -365,7 +380,7 @@ export async function importProfile(ctx: Ctx, file: string, options: ImportOptio
 
     log(reviewText(manifest, settings));
     if (wanted.has('db') && manifest.db) {
-      const local = new Set(localChangelogs());
+      const local = new Set(localChangelogs(ctx.config));
       const missing = manifest.db.changelogs.filter((c) => !local.has(c));
       if (missing.length > 0 && !options.force) {
         fail(`The profile's database has changelogs this checkout lacks (${missing.join(', ')}). Update your checkout, or pass --force.`);

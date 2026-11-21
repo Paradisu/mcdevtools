@@ -1,10 +1,11 @@
 import { existsSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { readResolved } from '../downloads.ts';
+import { platformOf } from '../platforms/index.ts';
 import type { DevConfig } from '../config.ts';
 import { CACHE, capture, fail } from '../util.ts';
 
-/** `world_version` from the top-level version.json of a server jar (Paper, Purpur and Velocity-free). */
+/** `world_version` from the top-level version.json of a game server jar (Paper and its forks; proxies have none). */
 export function dataVersionOfJar(jar: string): number | undefined {
   if (!existsSync(jar)) return undefined;
   const result = capture('unzip', ['-p', jar, 'version.json']);
@@ -18,15 +19,17 @@ export function dataVersionOfJar(jar: string): number | undefined {
 }
 
 /**
- * DataVersion stamped on generated items: `data_version` in dev config, else the downloaded Purpur jar's. Items
+ * DataVersion stamped on generated items: `data_version` in the config, else the first downloaded game server jar's. Items
  * written with an older version are upgraded by the server's data fixers; a newer one is refused, so don't guess.
  */
 export async function dataVersion(config: DevConfig & { data_version?: number }): Promise<number> {
   if (config.data_version) return config.data_version;
   const resolved = await readResolved().catch(() => undefined);
-  const found = resolved
-    ? // resolved.json records absolute paths; the checkout may have moved since (devcontainer vs host)
-      (dataVersionOfJar(resolved.purpur.file) ?? dataVersionOfJar(join(CACHE, 'servers', basename(resolved.purpur.file))))
-    : undefined;
-  return found ?? fail('Cannot determine the Minecraft DataVersion: run `dev setup`, or set data_version in .mcdevtools/config.local.toml');
+  let found: number | undefined;
+  for (const server of Object.values(resolved?.servers ?? {}).filter((candidate) => platformOf(candidate.type).worlds)) {
+    // resolved.json records absolute paths; the checkout may have moved since (devcontainer vs host)
+    found = dataVersionOfJar(server.file) ?? dataVersionOfJar(join(CACHE, 'servers', basename(server.file)));
+    if (found) break;
+  }
+  return found ?? fail('Cannot determine the Minecraft DataVersion: run `mcdev setup`, or set data_version in .mcdevtools/config.local.toml');
 }

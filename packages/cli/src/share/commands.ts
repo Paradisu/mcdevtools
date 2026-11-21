@@ -13,7 +13,9 @@ import { webRunning, webStart } from '../zellij.ts';
 import { runDaemon } from './daemon.ts';
 import { createProvider, providers } from './providers/index.ts';
 import { LOG_FILE, clearState, daemonPid, readState, shareTable } from './state.ts';
-import { TARGETS, parseTargets } from './targets.ts';
+import { defaultTargets, parseTargets, targetSpecs } from './targets.ts';
+import { emit } from '../extension/hooks.ts';
+import { refreshProxies } from './refresh.ts';
 
 const CLI_PATH = fileURLToPath(new URL('../cli.ts', import.meta.url));
 
@@ -24,12 +26,12 @@ async function chooseTargets(config: DevConfig, named: string[]): Promise<ShareT
       : interactive()
         ? await pickMany(
             'Share which targets?',
-            (Object.keys(TARGETS) as ShareTarget[]).map((name) => ({ name, value: name, checked: config.share.targets.includes(name) })),
+            Object.keys(targetSpecs(config)).map((name) => ({ name, value: name, checked: defaultTargets(config).includes(name) })),
           )
-        : config.share.targets;
+        : defaultTargets(config);
   const targets: ShareTarget[] = [];
-  for (const name of parseTargets(requested)) {
-    const reason = TARGETS[name].unavailable(config);
+  for (const name of parseTargets(config, requested)) {
+    const reason = targetSpecs(config)[name]!.unavailable(config);
     if (reason) {
       warn(`Not sharing ${name}: ${reason}`);
     } else {
@@ -49,9 +51,10 @@ function printSummary(config: DevConfig): void {
   }
   log(`Sharing via ${state.provider}`);
   const rows: string[][] = [];
-  for (const [name, tunnel] of Object.entries(state.tunnels) as [ShareTarget, NonNullable<(typeof state.tunnels)[ShareTarget]>][]) {
+  const specs = targetSpecs(config);
+  for (const [name, tunnel] of Object.entries(state.tunnels)) {
     if (tunnel.address) {
-      rows.push([name, TARGETS[name].describe(tunnel.address, config)]);
+      rows.push([name, specs[name]?.describe(tunnel.address, config) ?? tunnel.address.display]);
     } else {
       warn(`${name} is ${tunnel.status}${tunnel.error ? `: ${tunnel.error}` : ''}; see dev share logs`);
     }
@@ -59,13 +62,12 @@ function printSummary(config: DevConfig): void {
   if (rows.length > 0) {
     log(table(['target', 'address'], rows));
   }
-  if (state.tunnels.proxy?.proxyProtocol) {
-    warn(
-      `Direct connections to :${config.proxy.port} are refused while sharing (PROXY protocol); join via the tunnel or set share.proxy_protocol = "off".`,
-    );
-  }
-  if (state.tunnels.proxy && !state.tunnels.limbo && config.limbo.enabled) {
-    warn('Limbo is not shared; maintenance mode will drop remote players. Add the limbo target.');
+  for (const [name, tunnel] of Object.entries(state.tunnels)) {
+    if (tunnel.proxyProtocol) {
+      warn(
+        `Direct connections to :${specs[name]?.port(config) ?? '?'} (${name}) are refused while sharing (PROXY protocol); join via the tunnel or set share.proxy_protocol = "off".`,
+      );
+    }
   }
 }
 
@@ -83,7 +85,7 @@ async function start(config: DevConfig, args: string[]): Promise<void> {
   const targets = await chooseTargets(config, positionals);
   // Creating the provider validates its options and loads its SDK before anything is started
   const provider = await createProvider(config, providerName);
-  const unsupported = targets.filter((name) => !provider.capabilities.protocols.includes(TARGETS[name].protocol));
+  const unsupported = targets.filter((name) => !provider.capabilities.protocols.includes(targetSpecs(config)[name]!.protocol));
   if (unsupported.length > 0) {
     fail(`${provider.name} cannot tunnel: ${unsupported.join(', ')}`);
   }
@@ -137,13 +139,7 @@ export async function stopShare(config: DevConfig): Promise<void> {
   process.kill(pid, 'SIGKILL');
   clearState();
   // It never got to restore the proxy's configured addresses
-  if (await rerender(config, 'proxy')) {
-    const proxy = select(config, ['proxy'])[0]!;
-    if (isRunning(proxy)) {
-      await sendLine(proxy, 'vparadisu reload');
-      await sendLine(proxy, 'velocity reload');
-    }
-  }
+  await refreshProxies(config);
 }
 
 export const SHARE_COMMANDS: Command[] = [
@@ -152,7 +148,7 @@ export const SHARE_COMMANDS: Command[] = [
     usage: '<provider> <targets...>',
     summary: 'Internal: run the tunnel daemon',
     hidden: true,
-    run: ({ config }, args) => runDaemon(config, parseTargets(args.slice(1)), args[0] ?? config.share.provider, false),
+    run: ({ config }, args) => runDaemon(config, parseTargets(config, args.slice(1)), args[0] ?? config.share.provider, false),
   },
   {
     name: 'share start',

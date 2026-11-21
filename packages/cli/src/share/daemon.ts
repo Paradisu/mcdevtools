@@ -1,12 +1,11 @@
 import type { DevConfig, ShareTarget } from '../config.ts';
-import { isRunning, rerender, select } from '../instances.ts';
-import { sendLine } from '../supervisor.ts';
 import { sleep } from '../util.ts';
 import { backoffMs, renewDelay } from './address.ts';
 import type { TunnelHandle, TunnelProvider } from './provider.ts';
 import { createProvider } from './providers/index.ts';
 import { shareProxyProtocol, type ShareState, type TunnelState, clearState, logLine, rotateLog, setForeground, writePid, writeState } from './state.ts';
-import { TARGETS } from './targets.ts';
+import { refreshProxies } from './refresh.ts';
+import { targetSpecs } from './targets.ts';
 
 /** Consecutive failures after which a tunnel is reported as failed (it keeps retrying). */
 const FAILED_AFTER = 5;
@@ -50,29 +49,21 @@ export async function runDaemon(config: DevConfig, targets: ShareTarget[], provi
     writeState(state);
   };
 
-  /** Writes the state and, when the proxy/limbo addresses changed, re-renders the proxy config and reloads it. */
+  /** Writes the state and, when the public addresses changed, re-renders the proxies' config and reloads them. */
   const applyAddresses = async (): Promise<void> => {
     writeState(state);
-    const live = (name: ShareTarget) => (state.tunnels[name]?.status === 'live' ? state.tunnels[name]?.address?.display : undefined);
-    const protocol = shareProxyProtocol();
-    const key = `${live('proxy')}|${live('limbo')}|${protocol}`;
+    const key = Object.entries(state.tunnels)
+      .map(([name, tunnel]) => `${name}=${tunnel.status === 'live' ? tunnel.address?.display : ''}:${shareProxyProtocol(name)}`)
+      .sort()
+      .join('|');
     if (key === applied) {
       return;
     }
     applied = key;
     try {
-      if (!(await rerender(config, 'proxy'))) {
-        return;
-      }
-      const proxy = select(config, ['proxy'])[0]!;
-      if (isRunning(proxy)) {
-        await sendLine(proxy, 'vparadisu reload');
-        // haproxy-protocol is read by Velocity's own reload; without it the listener keeps expecting the old framing
-        await sendLine(proxy, 'velocity reload');
-        logLine('proxy reloaded with the new transfer addresses');
-      }
+      await refreshProxies(config);
     } catch (error) {
-      logLine(`could not update the proxy: ${(error as Error).message}`);
+      logLine(`could not update the proxies: ${(error as Error).message}`);
     }
   };
 
@@ -80,7 +71,7 @@ export async function runDaemon(config: DevConfig, targets: ShareTarget[], provi
     const slot = slots.get(name)!;
     const generation = ++slot.generation;
     update(name, { status: 'starting' });
-    const spec = TARGETS[name];
+    const spec = targetSpecs(config)[name]!;
     const proxyProtocol =
       spec.clientFacing && config.share.proxy_protocol !== 'off' && provider.capabilities.proxyProtocol ? config.share.proxy_protocol : undefined;
     try {

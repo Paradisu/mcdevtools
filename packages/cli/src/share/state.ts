@@ -24,7 +24,7 @@ export interface ShareState {
   provider: string;
   pid: number;
   startedAt: string;
-  tunnels: Partial<Record<ShareTarget, TunnelState>>;
+  tunnels: Record<ShareTarget, TunnelState>;
 }
 
 /** The daemon's pid if it is alive and really is our daemon (pids are reused after a container restart). */
@@ -86,19 +86,19 @@ export function writeState(state: ShareState): void {
   renameSync(`${STATE_FILE}.tmp`, STATE_FILE);
 }
 
-/** Whether the live proxy tunnel sends PROXY protocol headers, so velocity.toml must expect them. */
-export function shareProxyProtocol(): boolean {
-  const tunnel = readState()?.tunnels.proxy;
+/** Whether the live tunnel of `instance` sends PROXY protocol headers, so the proxy's config must expect them. */
+export function shareProxyProtocol(instance: string): boolean {
+  const tunnel = readState()?.tunnels[instance];
   return tunnel?.status === 'live' && tunnel.proxyProtocol !== undefined;
 }
 
-/** Tunnel addresses currently live for the targets that appear in proxy templates. */
-export function shareAddresses(): { proxy?: TunnelAddress; limbo?: TunnelAddress } {
-  const tunnels = readState()?.tunnels ?? {};
-  return {
-    proxy: tunnels.proxy?.status === 'live' ? tunnels.proxy.address : undefined,
-    limbo: tunnels.limbo?.status === 'live' ? tunnels.limbo.address : undefined,
-  };
+/** Tunnel addresses currently live, by target (instance) name. */
+export function shareAddresses(): Record<string, TunnelAddress> {
+  const addresses: Record<string, TunnelAddress> = {};
+  for (const [name, tunnel] of Object.entries(readState()?.tunnels ?? {})) {
+    if (tunnel.status === 'live' && tunnel.address) addresses[name] = tunnel.address;
+  }
+  return addresses;
 }
 
 export function rotateLog(): void {

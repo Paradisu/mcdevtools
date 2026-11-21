@@ -1,4 +1,5 @@
 import type { DevConfig, ShareTarget } from '../config.ts';
+import { platformOf } from '../platforms/index.ts';
 import { fail } from '../util.ts';
 import type { TunnelAddress, TunnelProtocol } from './provider.ts';
 
@@ -14,43 +15,53 @@ export interface TargetSpec {
   describe(address: TunnelAddress, config: DevConfig): string;
 }
 
-export const TARGETS: Record<ShareTarget, TargetSpec> = {
-  proxy: {
-    name: 'proxy',
-    protocol: 'tcp',
-    clientFacing: true,
-    port: (config) => config.proxy.port,
-    unavailable: () => undefined,
-    describe: (address) => address.display,
-  },
-  limbo: {
-    name: 'limbo',
-    protocol: 'tcp',
-    clientFacing: false,
-    port: (config) => config.limbo.port,
-    unavailable: (config) => (config.limbo.enabled ? undefined : 'limbo is disabled in the dev config'),
-    describe: (address) => address.display,
-  },
-  web: {
+/** Every proxy and standalone instance can be shared (backends are reached through their proxy), plus the web console. */
+export function targetSpecs(config: DevConfig): Record<ShareTarget, TargetSpec> {
+  const specs: Record<ShareTarget, TargetSpec> = {};
+  for (const instance of config.instances) {
+    const def = platformOf(instance.type);
+    if (def.role !== 'proxy' && instance.network) {
+      continue;
+    }
+    specs[instance.name] = {
+      name: instance.name,
+      protocol: 'tcp',
+      clientFacing: def.role === 'proxy',
+      port: () => instance.port,
+      unavailable: () => (instance.enabled ? undefined : `${instance.name} is disabled in the dev config`),
+      describe: (address) => address.display,
+    };
+  }
+  specs.web = {
     name: 'web',
     protocol: 'http',
     clientFacing: false,
-    port: (config) => config.web.port,
-    unavailable: (config) =>
-      config.web.bind === '127.0.0.1' ? undefined : 'the web target needs web.bind = "127.0.0.1" (the tunnel provides the HTTPS)',
-    describe: (address, config) => `${address.url}/${config.ui.session}`,
-  },
-};
+    port: (c) => c.web.port,
+    unavailable: (c) =>
+      c.web.bind === '127.0.0.1' ? undefined : 'the web target needs web.bind = "127.0.0.1" (the tunnel provides the HTTPS)',
+    describe: (address, c) => `${address.url}/${c.ui.session}`,
+  };
+  return specs;
+}
+
+/** What `share start` opens without arguments: [share].targets, or every enabled proxy and standalone instance. */
+export function defaultTargets(config: DevConfig): ShareTarget[] {
+  if (config.share.targets.length > 0) {
+    return config.share.targets;
+  }
+  return config.instances.filter((i) => i.enabled && (platformOf(i.type).role === 'proxy' || !i.network)).map((i) => i.name);
+}
 
 /** Validates target names; keeps first occurrences only. */
-export function parseTargets(names: string[]): ShareTarget[] {
+export function parseTargets(config: DevConfig, names: string[]): ShareTarget[] {
+  const specs = targetSpecs(config);
   const targets: ShareTarget[] = [];
   for (const name of names) {
-    if (!(name in TARGETS)) {
-      fail(`Unknown share target "${name}". Available: ${Object.keys(TARGETS).join(', ')}`);
+    if (!(name in specs)) {
+      fail(`Unknown share target "${name}". Available: ${Object.keys(specs).join(', ')}`);
     }
-    if (!targets.includes(name as ShareTarget)) {
-      targets.push(name as ShareTarget);
+    if (!targets.includes(name)) {
+      targets.push(name);
     }
   }
   return targets;

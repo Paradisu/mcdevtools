@@ -12,7 +12,7 @@ import { buildProtocol, ProtocolTable } from '../src/capture/protocol.ts';
 import { linkOf, receiverOf } from '../src/capture/receivers.ts';
 import type { CaptureMeta, ConnMeta } from '../src/capture/store.ts';
 import type { DevConfig } from '../src/config.ts';
-import type { Instance } from '../src/templates.ts';
+import { type Instance, instancesOf } from '../src/templates.ts';
 import { parseCount, parseSize, parseSpan, split } from '../src/capture/units.ts';
 import { filterFlags, hasFilterFlags, hasRecordingFlags, recordingFlags } from '../src/capture/wizard.ts';
 
@@ -181,22 +181,26 @@ test('sniffcraft export writes one readable file per connection', async () => {
 });
 
 const CONFIG = {
-  limbo: { enabled: true, port: 30000 },
-  servers: [{ name: 'lobby', port: 30066 }],
+  networks: [{ name: 'main', forwarding: 'modern' }],
+  instances: [
+    { name: 'proxy', type: 'velocity', network: 'main', enabled: true, port: 25565, debug_port: 5005 },
+    { name: 'lobby', type: 'purpur', network: 'main', enabled: true, port: 30066, debug_port: 5006 },
+    { name: 'limbo', type: 'limbo', enabled: true, port: 30000, debug_port: 5008 },
+  ],
 } as unknown as DevConfig;
-const instance = (name: string, platform: Instance['platform']) => ({ name, platform }) as Instance;
+const instance = (name: string): Instance => instancesOf(CONFIG).find((i) => i.name === name)!;
 
 test('receivers and links', () => {
   const frontend: ConnMeta = { id: 1, leg: 0, remote: '1.2.3.4:5', protocol: 775 };
   const backend: ConnMeta = { id: 2, leg: 1, remote: '127.0.0.1:30066', protocol: 775 };
-  const proxy = instance('proxy', 'velocity');
+  const proxy = instance('proxy');
   assert.equal(receiverOf(CONFIG, proxy, frontend, 0), 'proxy');
   assert.equal(receiverOf(CONFIG, proxy, frontend, 1), 'client');
   assert.equal(receiverOf(CONFIG, proxy, backend, 0), 'lobby');
   assert.equal(receiverOf(CONFIG, proxy, backend, 1), 'proxy');
   assert.equal(linkOf(CONFIG, proxy, backend, 1), 'lobby→proxy');
-  assert.equal(linkOf(CONFIG, instance('lobby', 'paper'), frontend, 0), 'proxy→lobby');
-  assert.equal(linkOf(CONFIG, instance('limbo', 'limbo'), frontend, 1), 'limbo→client');
+  assert.equal(linkOf(CONFIG, instance('lobby'), frontend, 0), 'proxy→lobby');
+  assert.equal(linkOf(CONFIG, instance('limbo'), frontend, 1), 'limbo→client');
   assert.equal(receiverOf(CONFIG, proxy, { ...backend, remote: '127.0.0.1:30000' }, 0), 'limbo');
 });
 
@@ -207,7 +211,7 @@ test('filters combine type, direction, receiver and player', () => {
     [1, { id: 1, leg: 0, remote: 'c:1', protocol: 775, name: 'Steve' }],
     [2, { id: 2, leg: 1, remote: '127.0.0.1:30066', protocol: 775, name: 'Steve' }],
   ]);
-  const proxy = instance('proxy', 'velocity');
+  const proxy = instance('proxy');
   const receiver = (conn: ConnMeta, dir: number) => receiverOf(CONFIG, proxy, conn, dir);
   const make = (values: Parameters<typeof parseFilter>[0]) => compileFilter(parseFilter(values), table, conns, receiver);
   const move = { conn: 1, state: 3, dir: 1, id: 52 };
