@@ -13,6 +13,7 @@ import { attach, dotDir, isRunning, javaPid, kill, runLine, sendLine, spawnSuper
 import { controlSocket } from './capture/paths.ts';
 import { hintsFile } from './capture/protocol.ts';
 import { catalogGroups, hotswapFlags } from './hotswap.ts';
+import { CAPTURE_MIN_JAVA, ensureJava, javaMajor, javaSpec } from './jdk.ts';
 
 export { isRunning };
 
@@ -25,27 +26,37 @@ export function select(config: DevConfig, names: string[]): Instance[] {
   return names.map((name) => all.find((instance) => instance.name === name) ?? fail(`Unknown instance "${name}"`));
 }
 
-/** Finds JVM flags the installed java accepts: enhanced redefinition needs JetBrains Runtime. */
-function jvmFlags(config: DevConfig): string[] {
+const flagCache = new Map<string, { flags: string[]; enhanced: boolean }>();
+
+/** Finds JVM flags the given java accepts: enhanced redefinition (and HotswapAgent) need JetBrains Runtime. */
+function jvmFlags(config: DevConfig, javaBin: string): { flags: string[]; enhanced: boolean } {
+  const cached = flagCache.get(javaBin);
+  if (cached) {
+    return cached;
+  }
   const flags: string[] = [];
+  let enhanced = false;
   if (config.java.enhanced_redefinition) {
     const attempts = [
       ['-XX:+AllowEnhancedClassRedefinition'],
       // Some JBR builds reject enhanced redefinition with the default collector
       ['-XX:+AllowEnhancedClassRedefinition', '-XX:+UseParallelGC'],
     ];
-    const working = attempts.find((attempt) => capture('java', [...attempt, '-version']).status === 0);
+    const working = attempts.find((attempt) => capture(javaBin, [...attempt, '-version']).status === 0);
     if (working) {
       flags.push(...working);
+      enhanced = true;
     } else {
-      warn('This java does not support -XX:+AllowEnhancedClassRedefinition (is it JetBrains Runtime?); hot reload is limited');
+      warn(`${javaBin} does not support -XX:+AllowEnhancedClassRedefinition (is it JetBrains Runtime?); hot reload is limited`);
     }
   }
   flags.push(...config.java.extra_flags);
-  return [...new Set(flags)];
+  const result = { flags: [...new Set(flags)], enhanced };
+  flagCache.set(javaBin, result);
+  return result;
 }
 
-async function prepare(config: DevConfig, resolved: ResolvedFiles, instance: Instance): Promise<void> {
+async function prepare(config: DevConfig, resolved: ResolvedFiles, instance: Instance, withCapture: boolean): Promise<void> {
   await mkdir(join(instance.dir, 'plugins'), { recursive: true });
   const server = resolved.servers[instance.name] ?? fail(`${instance.name} has not been downloaded; run \`mcdev setup\``);
   await copyFile(server.file, join(instance.dir, 'server.jar'));
@@ -71,7 +82,7 @@ async function prepare(config: DevConfig, resolved: ResolvedFiles, instance: Ins
       wanted.set(basename(artifact.path), source);
     }
   }
-  if (config.capture.enabled) {
+  if (withCapture) {
     if (!existsSync(CAPTURE_JAR)) {
       fail(`${CAPTURE_JAR} does not exist; run \`mcdev build\` (or set capture.enabled = false)`);
     }
@@ -88,13 +99,13 @@ async function prepare(config: DevConfig, resolved: ResolvedFiles, instance: Ins
   await applyTemplates(config, instance, installedKeys);
 }
 
-async function launch(config: DevConfig, minecraft: string, instance: Instance, flags: string[]): Promise<void> {
+async function launch(config: DevConfig, minecraft: string, instance: Instance, flags: string[], javaBin: string, withCapture: boolean): Promise<void> {
   const args = [
     `-Xms${instance.memory}`,
     `-Xmx${instance.memory}`,
     ...flags,
     // The capture plugin does nothing without its control socket
-    ...(config.capture.enabled
+    ...(withCapture
       ? [`-Dmcdevtools.capture.socket=${controlSocket(instance)}`, `-Dmcdevtools.capture.protocol=${hintsFile(minecraft)}`]
       : []),
     // No X11 libraries in the image, and a forwarded DISPLAY (WSLg) would otherwise make AWT load them (BKCommonLib fails)
@@ -107,7 +118,7 @@ async function launch(config: DevConfig, minecraft: string, instance: Instance, 
     ...(instance.def.nogui ? ['--nogui'] : []),
   ];
   await spawnSupervisor(instance, {
-    cmd: 'java',
+    cmd: javaBin,
     args,
     cwd: instance.dir,
     stopCommand: stopCommand(instance),
@@ -181,7 +192,6 @@ export async function start(config: DevConfig, names: string[], noBuild: boolean
   step('Starting network');
   const launchedAt = Date.now();
   const started: Instance[] = [];
-  const flags = jvmFlags(config);
   const groups = config.java.hotswap_agent ? await catalogGroups(config) : [];
   // Standalone servers (Limbo) go first so they are subscribed before a proxy tells them to transfer players back,
   // then the proxies (which may run database migrations before they bind their port), then the backends
@@ -192,9 +202,21 @@ export async function start(config: DevConfig, names: string[], noBuild: boolean
       log(`  ${row([instance.name, statusWord('running'), dim('already')])}`);
       continue;
     }
-    await prepare(config, resolved, instance);
-    const agent = config.java.hotswap_agent ? hotswapFlags(instance.def, groups, config.java.hotswap_plugins) : [];
-    await launch(config, resolved.minecraft, instance, [...new Set([...flags, ...agent])]);
+    // An instance may run on another JDK (sdkman id or path); on a terminal a missing one is offered for install
+    const javaBin = await ensureJava(javaSpec(config, instance.config), 'ask');
+    const { flags, enhanced } = jvmFlags(config, javaBin);
+    let withCapture = config.capture.enabled;
+    if (withCapture && javaBin !== 'java') {
+      const major = javaMajor(javaBin);
+      if (major !== undefined && major < CAPTURE_MIN_JAVA) {
+        warn(`${instance.name} runs on Java ${major}; the capture plugin needs Java ${CAPTURE_MIN_JAVA}, so it is not installed there`);
+        withCapture = false;
+      }
+    }
+    await prepare(config, resolved, instance, withCapture);
+    // HotswapAgent only exists in JetBrains Runtime
+    const agent = config.java.hotswap_agent && enhanced ? hotswapFlags(instance.def, groups, config.java.hotswap_plugins) : [];
+    await launch(config, resolved.minecraft, instance, [...new Set([...flags, ...agent])], javaBin, withCapture);
     started.push(instance);
     log(`  ${row([instance.name, statusWord('starting'), `port ${instance.port}  debug ${instance.debugPort}`])}`);
     if (instance.def.waitForPort) {

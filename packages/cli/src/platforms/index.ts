@@ -1,5 +1,6 @@
 import { fail } from '../util.ts';
 import { LIMBO } from './limbo.ts';
+import { FOLIA, PAPER, PAPER_FORK } from './paper.ts';
 import { PURPUR_PLATFORM } from './purpur.ts';
 import type { PlatformDef } from './types.ts';
 import { VELOCITY } from './velocity.ts';
@@ -24,4 +25,4 @@ export function platformTypes(): string[] {
   return [...PLATFORMS.keys()];
 }
 
-for (const def of [PURPUR_PLATFORM, VELOCITY, LIMBO]) registerPlatform(def);
+for (const def of [PURPUR_PLATFORM, PAPER, FOLIA, PAPER_FORK, VELOCITY, LIMBO]) registerPlatform(def);

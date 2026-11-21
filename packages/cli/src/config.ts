@@ -17,6 +17,8 @@ export interface JavaConfig {
   /** HotswapAgent plugins to load besides the ones the project's libraries need (see hotswap.ts) */
   hotswap_plugins: string[];
   extra_flags: string[];
+  /** JDK per instance type (sdkman id or absolute path), for instances that do not set `java` themselves */
+  defaults?: Record<string, string>;
 }
 
 /** One server process: a proxy, a backend or a standalone server. Keys not listed here are kept in `extra`. */
@@ -37,6 +39,8 @@ export interface InstanceConfig {
   /** "auto" = latest build, or a build id to pin exactly */
   build: string;
   first_start_commands: string[];
+  /** JDK this instance runs on: a sdkman candidate id (`21.0.8-tem`) or an absolute path; default: the `java` on the PATH */
+  java?: string;
   /** Backends: listed in the proxy's `try` order */
   try?: boolean;
   world_preset?: 'redstone_ready' | 'void' | 'default';
@@ -254,7 +258,7 @@ function defaults(): Record<string, unknown> {
 const LISTS: Record<string, string> = { instances: 'name', networks: 'name', plugins: 'key' };
 const INSTANCE_KEYS = new Set([
   'name', 'type', 'enabled', 'network', 'port', 'public_port', 'debug_port', 'memory', 'version', 'build',
-  'first_start_commands', 'try', 'world_preset',
+  'first_start_commands', 'try', 'world_preset', 'java',
 ]);
 
 /** Fills instance defaults and moves unknown keys into `extra`. */

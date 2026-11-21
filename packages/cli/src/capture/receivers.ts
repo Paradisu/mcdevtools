@@ -9,7 +9,7 @@ import type { ConnMeta } from './store.ts';
  *
  * - proxy frontend (client link): serverbound reaches the proxy, clientbound reaches the client
  * - proxy backend link: serverbound reaches the backend (found by its port), clientbound reaches the proxy
- * - backend in a network: its peer is the network's proxy
+ * - backend in a network: its peer is the network's proxy (just `proxy` when the network has several)
  * - standalone server (Limbo): players are transferred straight to it, so its peer is the client
  */
 export function receiverOf(config: DevConfig, instance: Instance, conn: ConnMeta, dir: number): string {
@@ -22,7 +22,9 @@ export function receiverOf(config: DevConfig, instance: Instance, conn: ConnMeta
   if (dir === 0) {
     return instance.name;
   }
-  return (instance.network ? proxiesOf(config, instance.network.name)[0]?.name : undefined) ?? 'client';
+  // With several proxies in the network the backend's peer cannot be told apart from the connection alone
+  const proxies = instance.network ? proxiesOf(config, instance.network.name) : [];
+  return proxies.length === 1 ? proxies[0]!.name : proxies.length > 1 ? 'proxy' : 'client';
 }
 
 /** `from→to` for a packet; the sender is whoever receives the opposite direction on the same link. */
@@ -32,7 +34,7 @@ export function linkOf(config: DevConfig, instance: Instance, conn: ConnMeta, di
 
 /** Names of the proxies, which sort right after the client in capture tables. */
 export function proxyNames(config: DevConfig): Set<string> {
-  return new Set(config.instances.filter((i) => platformOf(i.type).role === 'proxy').map((i) => i.name));
+  return new Set(['proxy', ...config.instances.filter((i) => platformOf(i.type).role === 'proxy').map((i) => i.name)]);
 }
 
 function backendName(config: DevConfig, remote: string): string {

@@ -1,5 +1,6 @@
 import { step, streamRow } from './output.ts';
 import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import { existsSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 import type { DevConfig, Platform, PluginConfig } from './config.ts';
@@ -9,6 +10,7 @@ import type { ResolveCtx, ServerArtifact } from './platforms/index.ts';
 import { readCatalog, resolveMinecraft, resolvePlugin } from './versions.ts';
 import type { Artifact } from './versions.ts';
 import { ensureProtocol } from './capture/protocol.ts';
+import { ensureJdks } from './jdk.ts';
 
 const RESOLVED = join(CACHE, 'resolved.json');
 
@@ -64,6 +66,16 @@ export async function readResolved(): Promise<ResolvedFiles> {
 
 async function fetchArtifact(artifact: Artifact, subdir: string, fileName: string, force: boolean): Promise<{ file: string; note: string }> {
   const dest = join(CACHE, subdir, fileName);
+  if (artifact.url.startsWith('file:')) {
+    // A local jar (paper-fork): copied again every time, since it changes under the same name
+    const source = fileURLToPath(artifact.url);
+    if (!existsSync(source)) {
+      fail(`${source} does not exist`);
+    }
+    await mkdir(join(CACHE, subdir), { recursive: true });
+    await copyFile(source, dest);
+    return { file: dest, note: 'copied' };
+  }
   if (force || !existsSync(dest)) {
     await download(artifact.url, dest, { md5: artifact.md5, sha256: artifact.sha256, sha512: artifact.sha512 });
     return { file: dest, note: 'downloaded' };
@@ -201,6 +213,8 @@ export async function setup(config: DevConfig, refresh: boolean): Promise<void> 
       }
     }
   }
+
+  await ensureJdks(config);
 
   await mkdir(CACHE, { recursive: true });
   const resolved: ResolvedFiles = { minecraft, servers, plugins };

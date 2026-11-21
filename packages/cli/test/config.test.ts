@@ -81,7 +81,6 @@ test('validateTopology names the offending instance', async () => {
     ['[[instances]]\nname = "x"\ntype = "purpur"\nnetwork = "ghost"\nport = 1\ndebug_port = 2\n', /network "ghost"/],
     ['[[instances]]\nname = "p2"\ntype = "velocity"\nport = 1\ndebug_port = 2\n', /Proxy "p2" needs a network/],
     ['[[instances]]\nname = "x"\ntype = "purpur"\nport = 30066\ndebug_port = 2\n', /Port 30066 is used by both/],
-    ['[[instances]]\nname = "p2"\ntype = "velocity"\nnetwork = "main"\nport = 1\ndebug_port = 2\n', /more than one proxy/],
     ['[[instances]]\nname = "bad name"\ntype = "purpur"\nport = 1\ndebug_port = 2\n', /Invalid instance name/],
   ] as const) {
     const loaded = await config(extra);
@@ -117,4 +116,70 @@ test('legacy conversion of partial override files pins builds and notes what it 
   assert.equal(instances.find((i) => i.name === 'proxy')!.version, '3.4.0-SNAPSHOT');
   const loose = convertLegacyConfig({ limbo_version: '1.2.3' });
   assert.match(loose.notes[0]!, /limbo_version/);
+});
+
+test('a network may have several proxies, each with its own port and the same servers and secret', async () => {
+  write('config.toml', BASE + '[[instances]]\nname = "proxy2"\ntype = "velocity"\nnetwork = "main"\nport = 25566\ndebug_port = 5015\n');
+  const config = await loadConfig();
+  validateTopology(config);
+  const { instancesOf, templateVars } = await import('../src/templates.ts');
+  const { proxiesOf, serversOf } = await import('../src/topology.ts');
+  assert.deepEqual(proxiesOf(config, 'main').map((i) => i.name), ['proxy', 'proxy2']);
+  assert.deepEqual(serversOf(config, 'main').map((i) => i.name), ['lobby']);
+  const [first, second] = ['proxy', 'proxy2'].map((name) => instancesOf(config).find((i) => i.name === name)!);
+  const a = await templateVars(config, first!);
+  const b = await templateVars(config, second!);
+  assert.equal(a.PROXY_PORT, '25565');
+  assert.equal(b.PROXY_PORT, '25566');
+  assert.equal(a.FORWARDING_SECRET, b.FORWARDING_SECRET, 'one secret per network');
+  assert.equal(a.VELOCITY_SERVERS, b.VELOCITY_SERVERS);
+  assert.match(a.VELOCITY_SERVERS!, /lobby = "127\.0\.0\.1:30066"/);
+});
+
+test('paper-fork resolves a local jar to a file URL and a URL as it is; it needs a jar', async () => {
+  const { platformOf } = await import('../src/platforms/index.ts');
+  const def = platformOf('paper-fork');
+  const ctx = {} as never;
+  const base = { name: 'fork', type: 'paper-fork', version: 'auto', build: 'auto', extra: {} } as never;
+  await assert.rejects(() => def.resolve(ctx, base), /needs jar/);
+  const local = await def.resolve(ctx, { ...(base as object), extra: { jar: 'libs/fork.jar' } } as never);
+  assert.equal(local.name, 'fork.jar');
+  assert.match(local.url, /^file:\/\/\/.*libs\/fork\.jar$/);
+  assert.equal(local.version, 'custom');
+  const remote = await def.resolve(ctx, { ...(base as object), version: '1.2', extra: { jar: 'https://example.org/x/fork-1.2.jar' } } as never);
+  assert.deepEqual([remote.name, remote.url, remote.version], ['fork-1.2.jar', 'https://example.org/x/fork-1.2.jar', '1.2']);
+  assert.equal(def.cacheName(remote), 'fork-1.2-fork-1.2.jar');
+});
+
+test('java specs resolve to sdkman candidates, absolute paths or the PATH java', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'mcdev-sdk-'));
+  process.env.SDKMAN_DIR = dir;
+  const { javaBinOf, javaSpec, ensureJava, installCommand, javaMajor } = await import('../src/jdk.ts');
+  assert.equal(javaBinOf(undefined), 'java');
+  assert.equal(javaBinOf('21.0.8-tem'), join(dir, 'candidates', 'java', '21.0.8-tem', 'bin', 'java'));
+  assert.equal(javaBinOf('/opt/jdk17'), '/opt/jdk17/bin/java');
+  assert.equal(javaBinOf('/opt/jdk17/bin/java'), '/opt/jdk17/bin/java');
+
+  const config = await loadConfig();
+  config.java.defaults = { purpur: '17.0.1-tem' };
+  const [lobby] = config.instances.filter((i) => i.name === 'lobby');
+  assert.equal(javaSpec(config, lobby!), '17.0.1-tem', 'the per-type default applies');
+  assert.equal(javaSpec(config, { ...lobby!, java: '8.0.1-zulu' }), '8.0.1-zulu', 'the instance wins');
+
+  assert.equal(await ensureJava(undefined, 'fail'), 'java');
+  await assert.rejects(() => ensureJava('21.0.8-tem', 'fail'), /sdkman is not available/);
+  mkdirSync(join(dir, 'bin'), { recursive: true });
+  writeFileSync(join(dir, 'bin', 'sdkman-init.sh'), '');
+  await assert.rejects(() => ensureJava('21.0.8-tem', 'fail'), /not installed\. Run: sdk install java 21\.0\.8-tem/);
+  await assert.rejects(() => ensureJava('21; rm -rf /', 'fail'), /neither an absolute path nor a sdkman candidate id/);
+  await assert.rejects(() => ensureJava('/nope/jdk', 'fail'), /does not exist/);
+  assert.deepEqual(installCommand('21.0.8-tem').slice(-2), ['_', '21.0.8-tem'], 'the id is an argument, not part of the script');
+
+  // A fake java that prints a version like the real one does, on stderr
+  const fake = join(dir, 'candidates', 'java', '17.0.1-tem', 'bin');
+  mkdirSync(fake, { recursive: true });
+  writeFileSync(join(fake, 'java'), '#!/bin/sh\necho \'openjdk version "17.0.1" 2021-10-19\' >&2\n', { mode: 0o755 });
+  assert.equal(await ensureJava('17.0.1-tem', 'fail'), join(fake, 'java'));
+  assert.equal(javaMajor(join(fake, 'java')), 17);
+  assert.equal(javaMajor('/definitely/not/java'), undefined);
 });

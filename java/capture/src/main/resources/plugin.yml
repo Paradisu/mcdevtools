@@ -3,4 +3,5 @@ version: ${version}
 authors: [${authors}]
 main: net.paradisu.mcdevtools.capture.paper.CapturePaper
 api-version: '${paperApiVersion}'
+folia-supported: true
 description: Dev-only packet capture (controlled by the mcdev CLI)

@@ -190,6 +190,19 @@ const CONFIG = {
 } as unknown as DevConfig;
 const instance = (name: string): Instance => instancesOf(CONFIG).find((i) => i.name === name)!;
 
+test('a backend in a network with several proxies has just "proxy" as peer', () => {
+  const several = {
+    networks: [{ name: 'main', forwarding: 'modern' }],
+    instances: [
+      { name: 'p1', type: 'velocity', network: 'main', enabled: true, port: 25565, debug_port: 5005 },
+      { name: 'p2', type: 'velocity', network: 'main', enabled: true, port: 25566, debug_port: 5006 },
+      { name: 'lobby', type: 'purpur', network: 'main', enabled: true, port: 30066, debug_port: 5007 },
+    ],
+  } as unknown as DevConfig;
+  const lobby = instancesOf(several).find((i) => i.name === 'lobby')!;
+  assert.equal(receiverOf(several, lobby, { id: 1, leg: 0, remote: 'x:1', protocol: 775 }, 1), 'proxy');
+});
+
 test('receivers and links', () => {
   const frontend: ConnMeta = { id: 1, leg: 0, remote: '1.2.3.4:5', protocol: 775 };
   const backend: ConnMeta = { id: 2, leg: 1, remote: '127.0.0.1:30066', protocol: 775 };

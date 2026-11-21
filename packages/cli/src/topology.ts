@@ -77,9 +77,6 @@ export function validateTopology(config: DevConfig): void {
     if (proxies.length === 0) {
       fail(`Network "${network.name}" has no proxy`);
     }
-    if (proxies.length > 1) {
-      fail(`Network "${network.name}" has ${proxies.length} proxies; more than one proxy per network is supported in a later version`);
-    }
   }
 
   const ports = new Map<number, string>();
