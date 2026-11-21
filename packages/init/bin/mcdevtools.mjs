@@ -2,7 +2,8 @@
 // @ts-check
 import { parseArgs } from 'node:util';
 import { DEFAULT_URL, init } from '../lib/init.mjs';
-import { update } from '../lib/update.mjs';
+import { afterUpdate, update } from '../lib/update.mjs';
+import { findToolPath, repoRoot } from '../lib/git.mjs';
 import { InitError } from '../lib/util.mjs';
 
 const HELP = `mcdevtools: set a project up for the mcdev dev tools
@@ -58,6 +59,11 @@ try {
   } else if (command === 'update') {
     const { values } = parseArgs({ args: rest, options: { ref: { type: 'string' }, 'no-install': { type: 'boolean' } } });
     update({ cwd: process.cwd(), ref: values.ref, install: !values['no-install'] });
+  } else if (command === '_after-update') {
+    // Run by the previous version's `update` once this version is checked out
+    const { values } = parseArgs({ args: rest, options: { path: { type: 'string' }, 'no-install': { type: 'boolean' } } });
+    const root = repoRoot(process.cwd());
+    afterUpdate({ root, path: values.path ?? findToolPath(root) ?? 'dev', install: !values['no-install'] });
   } else {
     throw new InitError(`Unknown command "${command}". Run with --help.`);
   }

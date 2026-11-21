@@ -38,8 +38,31 @@ export function update(options) {
   const after = git(['rev-parse', 'HEAD']);
   const results = [step(before === after ? 'ok' : 'changed', `submodule ${path}`, before === after ? 'already up to date' : `${before.slice(0, 7)} -> ${after.slice(0, 7)}`)];
 
-  results.push(...wireProject({ root, path, gradle: true, pnpm: true, install: options.install !== false }));
+  // The wiring and config migrations belong to the version that was just checked out, not to this (older) code
+  const bin = join(tool, 'packages', 'init', 'bin', 'mcdevtools.mjs');
+  if (before !== after && existsSync(bin)) {
+    const wired = run(process.execPath, [bin, '_after-update', '--path', path, ...(options.install === false ? ['--no-install'] : [])], { cwd: root, inherit: true });
+    if (wired.status !== 0) {
+      throw new InitError('The new version could not finish the update (see above); fix that and run the update again');
+    }
+  } else {
+    results.push(...afterUpdate({ root, path, install: options.install !== false }));
+  }
 
+  if (before !== after) {
+    console.log(`\n${git(['log', '--oneline', `${before}..${after}`])}`);
+    git(['add', path], root);
+    console.log(`\nThe new submodule commit is staged. Commit it: git commit -m "Update mcdevtools"`);
+  }
+  return results;
+}
+
+/**
+ * The part of an update that depends on the checked-out version: pnpm and Gradle wiring, config migrations.
+ * @param {{ root: string, path: string, install: boolean }} options
+ */
+export function afterUpdate({ root, path, install }) {
+  const results = wireProject({ root, path, gradle: true, pnpm: true, install });
   const config = join(root, '.mcdevtools', 'config.toml');
   if (existsSync(config)) {
     const text = readFileSync(config, 'utf8');
@@ -51,12 +74,6 @@ export function update(options) {
     } else {
       results.push(step('ok', 'config.toml', 'format is current'));
     }
-  }
-
-  if (before !== after) {
-    console.log(`\n${git(['log', '--oneline', `${before}..${after}`])}`);
-    git(['add', path], root);
-    console.log(`\nThe new submodule commit is staged. Commit it: git commit -m "Update mcdevtools"`);
   }
   return results;
 }
