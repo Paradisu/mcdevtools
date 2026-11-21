@@ -34,7 +34,9 @@ jobs:
       run: docker build -f devcontainer/Dockerfile -t mcdevtools-devcontainer:ci .
     - name: Typecheck, Test and Build
       run: |
-        docker run --rm --user root -e HOME=/root -e CI=true -v "$PWD:/work" -w /work mcdevtools-devcontainer:ci bash -lc '
+        # The image's user (UID 1000) differs from the runner's (1001); it needs to write into the checkout
+        chmod -R a+rwX "$PWD"
+        docker run --rm -e CI=true -v "$PWD:/work" -w /work mcdevtools-devcontainer:ci bash -lc '
           set -e
           git config --global --add safe.directory /work
           pnpm install --frozen-lockfile
