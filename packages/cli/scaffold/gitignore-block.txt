@@ -1,0 +1,10 @@
+.mcdevtools/run/
+.mcdevtools/.cache/
+.mcdevtools/captures/
+.mcdevtools/db/snapshots/
+.mcdevtools/db/fixtures.local/
+.mcdevtools/templates.local/
+.mcdevtools/layouts.local/
+.mcdevtools/.profile-backup/
+.mcdevtools/plugins-local/
+.mcdevtools/config.local.toml

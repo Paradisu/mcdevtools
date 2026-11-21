@@ -1,0 +1,6 @@
+# Copy to config.local.toml (gitignored). Everything here overrides config.toml.
+accept_eula = true
+
+# [[instances]]
+# name = "lobby"
+# enabled = false

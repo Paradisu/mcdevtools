@@ -1,0 +1,42 @@
+# mcdevtools project config (docs: dev/docs/environment.md). Personal overrides go in config.local.toml (gitignored):
+# tables merge, and [[instances]] / [[networks]] / [[plugins]] entries merge by name / key.
+format = 1
+
+# Starting servers means you accept https://aka.ms/MinecraftEULA: set this to true in config.local.toml
+accept_eula = false
+public_host = "localhost"
+online_mode = true
+
+# Extensions add project-specific commands, server types and hooks (see dev/docs/extensions.md), e.g.
+# extensions = ["extensions/myproject"]
+extensions = []
+
+[versions]
+# "auto" reads the Minecraft version from the Gradle version catalog ([versions.auto]); or set e.g. "1.21.8"
+minecraft = "auto"
+
+{{BUILD}}
+
+[capture]
+enabled = true
+
+# One proxy and one backend. Types: purpur, velocity, limbo; more are listed in dev/docs/platforms.md
+[[networks]]
+name = "main"
+
+[[instances]]
+name = "proxy"
+type = "velocity"
+network = "main"
+port = 25565
+debug_port = 5005
+memory = "512M"
+
+[[instances]]
+name = "lobby"
+type = "purpur"
+network = "main"
+port = 30066
+debug_port = 5006
+memory = "2G"
+try = true

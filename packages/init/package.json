@@ -1,0 +1,24 @@
+{
+  "name": "@mcdevtools/init",
+  "version": "0.1.0",
+  "description": "Sets a project up for mcdevtools (git submodule, pnpm workspace, Gradle included build) and updates it",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "bin": {
+    "mcdevtools": "bin/mcdevtools.mjs"
+  },
+  "exports": {
+    "./update": "./lib/update.mjs"
+  },
+  "scripts": {
+    "typecheck": "tsc -p .",
+    "test": "node --test \"test/*.test.mjs\""
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "typescript": "7.0.2"
+  }
+}

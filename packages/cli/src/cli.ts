@@ -24,7 +24,7 @@ import { migrateConfigCommand } from './legacy-config.ts';
 import { loadExtensions } from './extension/load.ts';
 import { dim, step } from './output.ts';
 import { commandHelp, groupOf, menuChoices, usage as helpUsage } from './help.ts';
-import { CONFIG_DIR, DevError, ROOT, capture, fail, log, warn } from './util.ts';
+import { CONFIG_DIR, DevError, ROOT, TOOL_ROOT, capture, fail, log, run, warn } from './util.ts';
 
 const noBuildFlag = { 'no-build': { type: 'boolean' } } as const;
 
@@ -75,6 +75,17 @@ const COMMANDS: Command[] = [
       const { values } = parseArgs({ args, options: { refresh: { type: 'boolean' } } });
       return setup(config, values.refresh ?? false);
     },
+  },
+  {
+    name: 'update',
+    usage: '',
+    summary: 'Update mcdevtools to a newer version',
+    details: 'Moves the mcdevtools submodule, re-applies the pnpm and Gradle wiring and migrates the config format. The new submodule commit is staged, never committed.',
+    options: [
+      { flag: '--ref <branch|tag|sha>', summary: 'Version to move to (default: latest of the followed branch)' },
+      { flag: '--no-install', summary: 'Do not run pnpm install afterwards' },
+    ],
+    run: (_ctx, args) => runUpdate(args),
   },
   {
     name: 'config migrate',
@@ -246,10 +257,20 @@ async function menu(group?: string): Promise<string[]> {
   return groups().includes(chosen) && !group ? menu(chosen) : chosen.split(' ');
 }
 
+/** `mcdev update`: the init package does the work; its output is shown as it comes. */
+function runUpdate(args: string[]): void {
+  run(process.execPath, [join(TOOL_ROOT, 'packages', 'init', 'bin', 'mcdevtools.mjs'), 'update', ...args], { cwd: ROOT });
+}
+
 async function main(argv: string[]): Promise<void> {
   if (argv.includes('--no-input')) {
     disableInput();
     argv = argv.filter((arg) => arg !== '--no-input');
+  }
+  if (argv[0] === 'update' && !argv.includes('--help')) {
+    // The tool is replaced while this runs, so it is a separate process and needs no project config
+    runUpdate(argv.slice(1));
+    return;
   }
   if (argv[0] === 'config' && argv[1] === 'migrate' && !argv.includes('--help')) {
     // Runs before a project config exists: it is what produces one
@@ -320,7 +341,6 @@ function ensureGradleCachesWritable(): void {
 
 /** Devcontainer postCreate hook: never fails container creation, just warns so it can be re-run. */
 async function bootstrap(config: DevConfig): Promise<void> {
-  const { run } = await import('./util.ts');
   const steps: [string, () => Promise<void> | void][] = [
     ['Building the project', () => instances.build(config)],
     ['Downloading servers and plugins', () => setup(config, false)],
