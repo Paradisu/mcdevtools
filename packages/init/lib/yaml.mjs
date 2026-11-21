@@ -31,3 +31,35 @@ export function addWorkspacePackages(text, entries) {
   lines.splice(end, 0, ...added.map((entry) => `  - ${entry}`));
   return { text: lines.join('\n'), added, manual: false };
 }
+
+/**
+ * Makes sure pnpm may run the install scripts of `names` (`allowBuilds`): pnpm refuses to install a dependency with a
+ * build script that is not approved, and the consuming workspace root is where the approval has to live.
+ * @param {string} text
+ * @param {string[]} names
+ * @returns {{ text: string, added: string[], manual: boolean }}
+ */
+export function addAllowBuilds(text, names) {
+  const lines = text.split('\n');
+  const at = lines.findIndex((line) => /^allowBuilds:\s*$/.test(line));
+  const entry = (/** @type {string} */ name) => `  '${name}': true`;
+  if (at === -1) {
+    if (lines.some((line) => /^allowBuilds:/.test(line))) {
+      return { text, added: [], manual: true };
+    }
+    const base = text.replace(/\n*$/, '');
+    return { text: `${base}${base ? '\n' : ''}allowBuilds:\n${names.map(entry).join('\n')}\n`, added: names, manual: false };
+  }
+  let end = at + 1;
+  const present = new Set();
+  while (end < lines.length && /^\s+\S/.test(lines[end] ?? '')) {
+    present.add((lines[end] ?? '').trim().replace(/^['"]|['"]?:.*$/g, ''));
+    end++;
+  }
+  const added = names.filter((name) => !present.has(name));
+  if (added.length === 0) {
+    return { text, added, manual: false };
+  }
+  lines.splice(end, 0, ...added.map(entry));
+  return { text: lines.join('\n'), added, manual: false };
+}

@@ -1,0 +1,42 @@
+{
+    "name": "mcdevtools",
+    "dockerComposeFile": ["docker-compose.yml"],
+    "service": "dev",
+    "workspaceFolder": "/workspaces/project",
+    "shutdownAction": "stopCompose",
+    "remoteUser": "vscode",
+    // The mcdevtools submodule must be checked out before the container starts
+    "initializeCommand": "git submodule update --init --recursive",
+    // gh and git-over-HTTPS (after `gh auth setup-git`) pick this token up
+    "remoteEnv": { "GH_TOKEN": "${localEnv:GH_TOKEN}" },
+    "postCreateCommand": "mcdev bootstrap",
+    // The proxy port (25565) is published by compose; other server and JDWP ports stay inside the container
+    "otherPortsAttributes": { "onAutoForward": "ignore" },
+    // zellij web client (`mcdev web start`): VS Code forwards it to the host with the default 127.0.0.1 bind
+    "forwardPorts": [8082],
+    "portsAttributes": { "8082": { "label": "zellij web", "onAutoForward": "silent" } },
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "redhat.java",
+                "vscjava.vscode-java-debug",
+                "vscjava.vscode-gradle",
+                "tamasfe.even-better-toml",
+                "redhat.vscode-yaml"
+            ],
+            "settings": {
+                "java.jdt.ls.java.home": "/opt/jbr",
+                "java.import.gradle.java.home": "/opt/jbr",
+                "java.configuration.runtimes": [
+                    { "name": "JavaSE-25", "path": "/opt/jbr", "default": true }
+                ],
+                "java.debug.settings.hotCodeReplace": "auto",
+                // Keep Eclipse/Buildship metadata out of the bind-mounted checkout: the host IDE writes its own paths there
+                "java.import.generatesMetadataFilesAtProjectRoot": false,
+                "java.import.exclusions": ["**/node_modules/**", "**/.mcdevtools/run/**", "**/.mcdevtools/.cache/**"],
+                "files.watcherExclude": { "**/.mcdevtools/run/**": true, "**/.mcdevtools/.cache/**": true },
+                "search.exclude": { "**/.mcdevtools/run": true, "**/.mcdevtools/.cache": true }
+            }
+        }
+    }
+}

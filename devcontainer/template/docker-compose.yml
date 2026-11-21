@@ -1,0 +1,55 @@
+# Dev container for a project that uses mcdevtools. `mcdev` finds the project from any directory inside it.
+# Rename the workspace folder (/workspaces/project) if you like; keep it equal to workspaceFolder in devcontainer.json.
+name: mcdev
+services:
+  dev:
+    image: ghcr.io/paradisu/mcdevtools-devcontainer:${MCDEVTOOLS_DEVCONTAINER_TAG:-latest}
+    command: sleep infinity
+    # Reaps the zombie processes left behind by the servers and their supervisors
+    init: true
+    volumes:
+      - ..:/workspaces/project:cached
+      - gradle-cache:/home/vscode/.gradle
+      # Gradle's per-project caches and lock files live in .gradle directories inside the checkout. Keep the
+      # container's own, so it never waits on locks held by a Gradle daemon or IDE running on the host.
+      - gradle-project:/workspaces/project/.gradle
+    ports:
+      # Binds 0.0.0.0 on the host, so the first proxy is joinable from the LAN
+      - "${MCDEV_PROXY_PORT:-25565}:25565"
+      # zellij web client (`mcdev web start`). Only needed with web.bind = "0.0.0.0" (TLS); with the default
+      # 127.0.0.1 bind, reach it through VS Code port forwarding instead.
+      # - "127.0.0.1:8082:8082"
+    # Uncomment with [db] / [redis] in .mcdevtools/config.toml
+    # environment:
+    #   MCDEV_DB_HOST: postgres
+    #   MCDEV_DB_NAME: project
+    #   MCDEV_DB_USER: project
+    #   MCDEV_DB_PASSWORD: project
+    #   MCDEV_REDIS_HOST: redis
+    # depends_on:
+    #   postgres:
+    #     condition: service_healthy
+    #   redis:
+    #     condition: service_started
+  # postgres:
+  #   image: postgres:17
+  #   # Our own pg_hba.conf (trust authentication); unlike POSTGRES_HOST_AUTH_METHOD it also applies to old volumes
+  #   command: ["postgres", "-c", "hba_file=/etc/postgresql/pg_hba.conf"]
+  #   environment:
+  #     POSTGRES_DB: project
+  #     POSTGRES_USER: project
+  #     POSTGRES_PASSWORD: project
+  #   volumes:
+  #     - pgdata:/var/lib/postgresql/data
+  #     - ./postgres/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U project -d project"]
+  #     interval: 5s
+  #     retries: 20
+  # redis:
+  #   image: redis:8-alpine
+  #   command: ["redis-server", "--requirepass", "project"]
+volumes:
+  gradle-cache:
+  gradle-project:
+  # pgdata:

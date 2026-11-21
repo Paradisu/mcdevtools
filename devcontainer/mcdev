@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# `mcdev` from any directory inside a project that uses mcdevtools: finds the project, then runs the checkout's
+# own launcher (the mcdevtools submodule), so every project uses the version it pinned.
+set -euo pipefail
+
+dir="$PWD"
+while [ "$dir" != "/" ] && [ ! -f "$dir/.mcdevtools/config.toml" ]; do dir="$(dirname "$dir")"; done
+root="${MCDEV_PROJECT:-}"
+[ -n "$root" ] || { [ -f "$dir/.mcdevtools/config.toml" ] && root="$dir"; } || true
+
+launcher=""
+if [ -n "$root" ] && [ -f "$root/.gitmodules" ]; then
+  while read -r _ path; do
+    if [ -x "$root/$path/bin/mcdev" ]; then launcher="$root/$path/bin/mcdev"; break; fi
+  done < <(git config -f "$root/.gitmodules" --get-regexp '^submodule\..*\.path$' 2>/dev/null || true)
+fi
+[ -n "$launcher" ] || launcher="${MCDEV_HOME:-}/bin/mcdev"
+if [ ! -x "$launcher" ]; then
+  echo "mcdev: no mcdevtools checkout found. Run \`npx github:Paradisu/mcdevtools init\` in your project (or set MCDEV_HOME)." >&2
+  exit 1
+fi
+exec "$launcher" "$@"

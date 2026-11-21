@@ -9,7 +9,7 @@ import { patchBlock } from '../lib/markers.mjs';
 import { migrateConfigText } from '../lib/migrations.mjs';
 import { update } from '../lib/update.mjs';
 import { run } from '../lib/util.mjs';
-import { addWorkspacePackages } from '../lib/yaml.mjs';
+import { addAllowBuilds, addWorkspacePackages } from '../lib/yaml.mjs';
 
 const env = { GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' };
 Object.assign(process.env, env);
@@ -55,7 +55,9 @@ test('init wires a project and a second run changes nothing', () => {
   assert.ok(existsSync(join(project, 'dev', 'packages', 'init', 'package.json')), 'the submodule is checked out');
   assert.match(readFileSync(join(project, '.gitmodules'), 'utf8'), /path = dev/);
   assert.match(readFileSync(join(project, '.gitmodules'), 'utf8'), /branch = main/);
-  assert.match(readFileSync(join(project, 'pnpm-workspace.yaml'), 'utf8'), /- dev\/packages\/\*\n\s+- \.mcdevtools\/extensions\/\*/);
+  const workspace = readFileSync(join(project, 'pnpm-workspace.yaml'), 'utf8');
+  assert.match(workspace, /- dev\/packages\/\*\n\s+- \.mcdevtools\/extensions\/\*/);
+  assert.match(workspace, /allowBuilds:\n  '@pinggy\/pinggy': true/);
   assert.equal(JSON.parse(readFileSync(join(project, 'package.json'), 'utf8')).packageManager, 'pnpm@12.11.2');
   assert.match(readFileSync(join(project, 'settings.gradle.kts'), 'utf8'), /\/\/ mcdevtools:begin\nincludeBuild\("dev\/java"\) \{ name = "mcdevtools" \}\n\/\/ mcdevtools:end/);
   assert.match(readFileSync(join(project, '.gitignore'), 'utf8'), /build\/\n\n# mcdevtools:begin\n\.mcdevtools\/run\//);
@@ -113,4 +115,11 @@ test('config migrations run in order and rewrite the format', () => {
   assert.equal(result.text, 'format = 3\nc = 1\n');
   assert.deepEqual(result.applied, ['rename a', 'rename b']);
   assert.deepEqual(migrateConfigText('format = 3\n', { migrations }).applied, []);
+});
+
+test('addAllowBuilds appends, extends and leaves approved entries alone', () => {
+  assert.equal(addAllowBuilds('packages:\n  - a\n', ['x']).text, "packages:\n  - a\nallowBuilds:\n  'x': true\n");
+  const extended = addAllowBuilds("allowBuilds:\n  'y': true\npackages:\n  - a\n", ['x', 'y']);
+  assert.equal(extended.text, "allowBuilds:\n  'y': true\n  'x': true\npackages:\n  - a\n");
+  assert.deepEqual(addAllowBuilds("allowBuilds:\n  '@pinggy/pinggy': true\n", ['@pinggy/pinggy']).added, []);
 });

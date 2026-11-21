@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { patchBlock } from './markers.mjs';
 import { run, step } from './util.mjs';
-import { addWorkspacePackages } from './yaml.mjs';
+import { addAllowBuilds, addWorkspacePackages } from './yaml.mjs';
 
 /**
  * Connects an mcdevtools checkout at `path` to the project: pnpm workspace, root package.json, `pnpm install` and
@@ -30,12 +30,14 @@ function wirePnpm(root, path, install) {
   const results = [];
   const workspace = join(root, 'pnpm-workspace.yaml');
   const before = existsSync(workspace) ? readFileSync(workspace, 'utf8') : '';
-  const edit = addWorkspacePackages(before, [`${path}/packages/*`, '.mcdevtools/extensions/*']);
-  if (edit.manual) {
-    results.push(step('manual', 'pnpm-workspace.yaml', `add "${path}/packages/*" and ".mcdevtools/extensions/*" to its packages list`));
-  } else if (edit.added.length > 0) {
-    writeFileSync(workspace, edit.text);
-    results.push(step('changed', 'pnpm-workspace.yaml', `added ${edit.added.join(', ')}`));
+  const packages = addWorkspacePackages(before, [`${path}/packages/*`, '.mcdevtools/extensions/*']);
+  // Optional dependency of the CLI (tunnel provider) that has an install script
+  const builds = addAllowBuilds(packages.text, ['@pinggy/pinggy']);
+  if (packages.manual || builds.manual) {
+    results.push(step('manual', 'pnpm-workspace.yaml', `add "${path}/packages/*" and ".mcdevtools/extensions/*" to its packages list and '@pinggy/pinggy': true under allowBuilds`));
+  } else if (packages.added.length + builds.added.length > 0) {
+    writeFileSync(workspace, builds.text);
+    results.push(step('changed', 'pnpm-workspace.yaml', `added ${[...packages.added, ...builds.added].join(', ')}`));
   } else {
     results.push(step('ok', 'pnpm-workspace.yaml'));
   }

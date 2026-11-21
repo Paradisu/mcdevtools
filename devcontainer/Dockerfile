@@ -1,5 +1,6 @@
-# Dev image for ParadisuPlugin: JetBrains Runtime 25 (hot code replace), Node 24 + pnpm (dev tool), build/debug tooling.
-# Build context is the repository root.
+# mcdevtools dev image: JetBrains Runtime 25 (hot code replace), Node 24 + pnpm (the mcdev CLI), sdkman for other JDKs,
+# zellij and build/debug tooling. Published as ghcr.io/paradisu/mcdevtools-devcontainer. Build context is the
+# repository root: docker build -f devcontainer/Dockerfile .
 FROM debian:trixie-slim
 
 ARG TARGETARCH
@@ -9,9 +10,9 @@ ARG USER_GID=${USER_UID}
 # https://github.com/JetBrains/JetBrainsRuntime/releases (jbr-release-<JBR_VERSION>b<JBR_BUILD>)
 ARG JBR_VERSION=25.0.4
 ARG JBR_BUILD=b508.27
-# https://nodejs.org/dist/index.json (keep the 24.x line; dev/package.json requires >=24)
+# https://nodejs.org/dist/index.json (keep the 24.x line; package.json requires >=24)
 ARG NODE_VERSION=24.21.0
-# Must equal "packageManager" in dev/package.json
+# Must equal "packageManager" in package.json
 ARG PNPM_VERSION=12.11.2
 # https://github.com/HotswapProjects/HotswapAgent/releases
 ARG HOTSWAP_AGENT_VERSION=2.0.3
@@ -25,7 +26,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        ca-certificates curl git jq openssl procps python3 less unzip xz-utils sudo \
+        ca-certificates curl git jq openssl procps python3 less zip unzip xz-utils sudo \
         postgresql-client openssh-client gnupg locales iproute2 netcat-openbsd \
     && rm -rf /var/lib/apt/lists/*
 
@@ -34,12 +35,9 @@ RUN groupadd --gid ${USER_GID} ${USERNAME} \
     && echo "${USERNAME} ALL=(root) NOPASSWD:ALL" > /etc/sudoers.d/${USERNAME} \
     && chmod 0440 /etc/sudoers.d/${USERNAME}
 
-# Mount points for the Gradle project caches (see docker-compose.yml). New volumes inherit their owner and mode,
-# and the devcontainer CLI renumbers the user to the host user's UID (for example 1001 on GitHub runners), which
-# would lock that user out of a volume owned by UID 1000: so make them writable by anyone.
-RUN mkdir -p /workspaces/ParadisuPlugin/.gradle /workspaces/ParadisuPlugin/build-logic/.gradle \
-    && chown -R ${USERNAME}:${USER_GID} /workspaces \
-    && chmod 0777 /workspaces/ParadisuPlugin/.gradle /workspaces/ParadisuPlugin/build-logic/.gradle
+# Projects mount their workspace under /workspaces (see devcontainer/template). Gradle's per-project cache volumes are
+# mounted by the project's compose file; the CLI makes them writable on first use (`mcdev bootstrap`).
+RUN mkdir -p /workspaces && chown ${USERNAME}:${USER_GID} /workspaces
 
 # JetBrains Runtime SDK (the SDK variant includes javac, which the Gradle toolchain needs)
 RUN case "${TARGETARCH}" in amd64) arch=x64 ;; arm64) arch=aarch64 ;; *) echo "unsupported arch ${TARGETARCH}" >&2; exit 1 ;; esac \
@@ -52,12 +50,12 @@ RUN case "${TARGETARCH}" in amd64) arch=x64 ;; arm64) arch=aarch64 ;; *) echo "u
     && tar -xzf "/tmp/${file}" -C /opt/jbr --strip-components=1 \
     && rm -f /tmp/jbrsdk-*
 
-# HotswapAgent (only used when hotswap_agent = true in dev/dev.toml)
+# HotswapAgent (only used when [java] hotswap_agent = true in .mcdevtools/config.toml)
 RUN mkdir -p /opt/jbr/lib/hotswap \
     && curl -fsSL -o /opt/jbr/lib/hotswap/hotswap-agent.jar \
         "https://github.com/HotswapProjects/HotswapAgent/releases/download/RELEASE-${HOTSWAP_AGENT_VERSION}/hotswap-agent-${HOTSWAP_AGENT_VERSION}.jar"
 
-# zellij: terminal workspace for the server consoles (`dev ui`), with a web client (`dev web`)
+# zellij: terminal workspace for the server consoles (`mcdev ui`), with a web client (`mcdev web`)
 RUN case "${TARGETARCH}" in amd64) arch=x86_64 ;; arm64) arch=aarch64 ;; *) echo "unsupported arch ${TARGETARCH}" >&2; exit 1 ;; esac \
     && file="zellij-${arch}-unknown-linux-musl.tar.gz" \
     && base="https://github.com/zellij-org/zellij/releases/download/v${ZELLIJ_VERSION}" \
@@ -80,7 +78,7 @@ RUN mkdir -p -m 755 /etc/apt/keyrings \
     && rm -rf /var/lib/apt/lists/* \
     && gh --version
 
-# Node.js (runs the TypeScript dev tool natively) + pnpm via corepack
+# Node.js (runs the TypeScript CLI natively) + pnpm via corepack
 RUN case "${TARGETARCH}" in amd64) arch=x64 ;; arm64) arch=arm64 ;; *) echo "unsupported arch ${TARGETARCH}" >&2; exit 1 ;; esac \
     && file="node-v${NODE_VERSION}-linux-${arch}.tar.xz" \
     && curl -fsSL -o "/tmp/${file}" "https://nodejs.org/dist/v${NODE_VERSION}/${file}" \
@@ -94,11 +92,21 @@ RUN case "${TARGETARCH}" in amd64) arch=x64 ;; arm64) arch=arm64 ;; *) echo "uns
     && ln -s /opt/node/bin/npx /usr/local/bin/npx \
     && ln -s /opt/node/bin/corepack /usr/local/bin/corepack
 
+# sdkman, for projects whose servers need another JDK (`java = "<id>"` on an instance, see docs/platforms.md). It is
+# installed without any candidate, so JetBrains Runtime stays the default Java. The directory is user-writable so
+# `sdk install` needs no root.
+ENV SDKMAN_DIR=/usr/local/sdkman
+RUN curl -fsSL "https://get.sdkman.io?rcupdate=false" | bash \
+    && printf '%s\n' 'sdkman_auto_answer=true' 'sdkman_auto_env=false' 'sdkman_selfupdate_feature=false' 'sdkman_colour_enable=false' >> "${SDKMAN_DIR}/etc/config" \
+    && chown -R ${USERNAME}:${USER_GID} "${SDKMAN_DIR}"
+
 # Login shells (bash -l, VS Code terminals) reset PATH from /etc/profile, so ENV alone is not enough
 RUN printf '%s\n' \
         'export JAVA_HOME=/opt/jbr' \
         'export PATH="/opt/jbr/bin:$HOME/.local/bin:$PATH"' \
-        > /etc/profile.d/paradisu.sh
+        'export SDKMAN_DIR=/usr/local/sdkman' \
+        '[ -s "$SDKMAN_DIR/bin/sdkman-init.sh" ] && . "$SDKMAN_DIR/bin/sdkman-init.sh"' \
+        > /etc/profile.d/mcdevtools.sh
 
 USER ${USERNAME}
 WORKDIR /home/${USERNAME}
@@ -116,8 +124,8 @@ RUN mkdir -p ~/.local/bin ~/.gradle \
         > ~/.gradle/gradle.properties
 
 # Pre-fetch the Gradle distribution pinned by the wrapper
-COPY --chown=${USERNAME}:${USER_GID} gradlew /tmp/gw/gradlew
-COPY --chown=${USERNAME}:${USER_GID} gradle/wrapper /tmp/gw/gradle/wrapper
+COPY --chown=${USERNAME}:${USER_GID} java/gradlew /tmp/gw/gradlew
+COPY --chown=${USERNAME}:${USER_GID} java/gradle/wrapper /tmp/gw/gradle/wrapper
 # A Windows checkout with core.autocrlf may have turned the script into CRLF (see .gitattributes), which fails with
 # "gradlew: not found"; strip it so the image builds anyway
 RUN sed -i 's/\r$//' /tmp/gw/gradlew \
@@ -125,5 +133,5 @@ RUN sed -i 's/\r$//' /tmp/gw/gradlew \
     && /tmp/gw/gradlew --version \
     && rm -rf /tmp/gw
 
-# `dev` works from any directory once the workspace is mounted
-RUN sudo ln -s /workspaces/ParadisuPlugin/dev/dev /usr/local/bin/dev
+# `mcdev` works from any directory of a project that uses mcdevtools
+COPY --chmod=0755 devcontainer/mcdev /usr/local/bin/mcdev
