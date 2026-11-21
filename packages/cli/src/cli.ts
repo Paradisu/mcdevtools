@@ -1,6 +1,6 @@
 import { paint } from './output.ts';
 import { parseArgs } from 'node:util';
-import { accessSync, constants, existsSync, readdirSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Command, Ctx } from './command.ts';
 import { type DevConfig, loadConfig } from './config.ts';
@@ -24,6 +24,7 @@ import { migrateConfigCommand } from './legacy-config.ts';
 import { loadExtensions } from './extension/load.ts';
 import { dim, step } from './output.ts';
 import { commandHelp, groupOf, menuChoices, usage as helpUsage } from './help.ts';
+import { ensureGradleCachesWritable } from './java.ts';
 import { CONFIG_DIR, DevError, ROOT, TOOL_ROOT, capture, fail, log, run, warn } from './util.ts';
 
 const noBuildFlag = { 'no-build': { type: 'boolean' } } as const;
@@ -313,30 +314,6 @@ async function main(argv: string[]): Promise<void> {
   }
   const ctx: Ctx = { config, stopAll: () => instances.stop(config, []) };
   await found.command.run(ctx, found.args);
-}
-
-/**
- * The Gradle project caches are Docker volumes (see docker-compose.yml). One created for a different user ID than
- * the one running now (the CLI renumbers the container user to the host's) is not writable, so Gradle fails to start.
- */
-function ensureGradleCachesWritable(): void {
-  for (const relative of ['.gradle', join('build-logic', '.gradle')]) {
-    const dir = join(ROOT, relative);
-    if (!existsSync(dir)) {
-      continue;
-    }
-    try {
-      accessSync(dir, constants.W_OK);
-    } catch {
-      const owner = `${process.getuid?.()}:${process.getgid?.()}`;
-      const result = capture('sudo', ['-n', 'chown', '-R', owner, dir]);
-      if (result.status === 0) {
-        log(`Fixed ownership of ${relative} (it belonged to another user ID)`);
-      } else {
-        warn(`${relative} is not writable and could not be fixed: ${result.stderr.trim()}. Remove the container's gradle volumes and reopen.`);
-      }
-    }
-  }
 }
 
 /** Devcontainer postCreate hook: never fails container creation, just warns so it can be re-run. */
