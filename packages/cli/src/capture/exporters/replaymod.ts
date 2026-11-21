@@ -214,7 +214,7 @@ export const replaymod: Exporter = {
     };
     let self: SelfPackets | undefined;
     if (playerType === undefined || Number.isNaN(playerType)) {
-      lines.push('note: recording player not spawned: no player entity type id; run dev capture protocol --refresh and recapture, or pass --opt player-type=<id>');
+      lines.push('note: recording player not spawned: no player entity type id; run mcdev capture protocol --refresh and recapture, or pass --opt player-type=<id>');
     } else if (ids.addEntity === undefined || ids.positionSync === undefined || ids.rotateHead === undefined) {
       lines.push('note: recording player not spawned: the packet table lacks add_entity, entity_position_sync or rotate_head');
     } else {
@@ -254,14 +254,14 @@ export const replaymod: Exporter = {
       const metadata = {
         singleplayer: false,
         serverName: ctx.instance,
-        customServerName: `Paradisu dev ${ctx.instance}`,
+        customServerName: `mcdevtools ${ctx.instance}`,
         duration: session.lastMs,
         date: ctx.startEpochMs + Math.floor(session.firstUs / 1000),
         mcversion: ctx.protocol.minecraftVersion,
         fileFormat: 'MCPR',
         fileFormatVersion: FILE_FORMAT_VERSION,
         protocol: ctx.protocol.protocolVersion,
-        generator: 'Paradisu dev capture',
+        generator: 'Paradisu mcdev capture',
         selfId: session.local.entityId,
         players: session.local.uuid ? [session.local.uuid] : [],
       };

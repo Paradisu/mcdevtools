@@ -81,7 +81,7 @@ async function runningTargets(ctx: Ctx, names: string[], message: string): Promi
   }
   const running = all.filter((instance) => isRunning(instance));
   if (running.length === 0) {
-    fail('Nothing is running. Start the network with `dev start`.');
+    fail('Nothing is running. Start the network with `mcdev start`.');
   }
   if (interactive() && running.length > 1) {
     const chosen = await pickInstances(ctx.config, message, (instance) => isRunning(instance));
@@ -126,7 +126,7 @@ async function captureArg(id: string | undefined, message: string, latestWhenScr
   if (latestWhenScripted) {
     return loadCapture('latest');
   }
-  return fail('Name a capture (see `dev capture list`)');
+  return fail('Name a capture (see `mcdev capture list`)');
 }
 
 async function tableOf(capture: Capture): Promise<ProtocolTable> {
@@ -220,7 +220,7 @@ async function startCommand(ctx: Ctx, args: string[]): Promise<void> {
   };
   if (interactive() && !hasRecordingFlags(values)) {
     rec = await askRecording(await connectedPlayers(targets), table);
-    sameAs(`dev capture start --on ${targets.map((instance) => instance.name).join(',')} ${recordingFlags(rec)}`.trimEnd());
+    sameAs(`mcdev capture start --on ${targets.map((instance) => instance.name).join(',')} ${recordingFlags(rec)}`.trimEnd());
   }
   const { players, nextJoin } = rec;
   const until = rec.until.flatMap((pattern) => {
@@ -373,7 +373,7 @@ async function statusCommand(ctx: Ctx): Promise<void> {
     log(table(['instance', { header: '#', align: 'right' }, 'player', 'link', 'state', 'remote', 'rec'], connRows));
   }
   if (hintsMissing) {
-    next('dev capture protocol', 'restart the instance');
+    next('mcdev capture protocol', 'restart the instance');
   }
 }
 
@@ -509,7 +509,7 @@ async function watchCommand(ctx: Ctx, args: string[]): Promise<void> {
     });
     values = { ...values, ...picked };
     const flags = filterFlags(picked);
-    if (flags) sameAs(`dev capture watch --on ${targets.map((instance) => instance.name).join(',')} ${flags}`);
+    if (flags) sameAs(`mcdev capture watch --on ${targets.map((instance) => instance.name).join(',')} ${flags}`);
   }
   await watchInstances(ctx, targets, values, new Map());
 }
@@ -598,7 +598,7 @@ async function showCommand(ctx: Ctx, args: string[]): Promise<void> {
     const picked = await askFilter(await captureFilterSource(ctx, capture, names, table_));
     filterValues = { ...values, ...picked };
     const flags = filterFlags(picked);
-    if (flags) sameAs(`dev capture show ${capture.meta.id} ${flags}`);
+    if (flags) sameAs(`mcdev capture show ${capture.meta.id} ${flags}`);
   }
   const filter = parseFilter(filterValues);
   const limit = values.limit ? parseCount(values.limit, '--limit') : Infinity;
@@ -702,15 +702,15 @@ async function packetCommand(ctx: Ctx, args: string[]): Promise<void> {
   const seqText =
     positionals[1] ??
     (interactive()
-      ? await askText('Packet number (#n from dev capture show)', {
+      ? await askText('Packet number (#n from mcdev capture show)', {
           validate: validator((text) => {
             if (!/^\d+$/.test(text.trim())) throw new DevError('Enter a whole number');
           }),
         })
-      : fail('Usage: dev capture packet <capture> <seq> [--instance x] [--raw <file>] [--no-id]'));
+      : fail('Usage: mcdev capture packet <capture> <seq> [--instance x] [--raw <file>] [--no-id]'));
   const seq = Number(seqText);
   if (!Number.isInteger(seq) || seq < 0) {
-    fail('<seq> must be a packet number from `dev capture show`');
+    fail('<seq> must be a packet number from `mcdev capture show`');
   }
   const table_ = await tableOf(capture);
   const { file, instance, conns, startEpochMs } = await openDump(ctx, capture, name);
@@ -762,7 +762,7 @@ async function exportCommand(ctx: Ctx, args: string[]): Promise<void> {
   }
   if (interactive() && (!values.format || !hasFilterFlags(values))) {
     const instanceFlag = names.length < dumpInstances(capture).length ? ` --instance ${names.join(',')}` : '';
-    sameAs(`dev capture export ${capture.meta.id} --format ${format.name}${instanceFlag} ${filterFlags(picked)}`.trimEnd());
+    sameAs(`mcdev capture export ${capture.meta.id} --format ${format.name}${instanceFlag} ${filterFlags(picked)}`.trimEnd());
   }
   const filter = parseFilter(filterValues);
   const options: Record<string, string | boolean | undefined> = {};
@@ -814,7 +814,7 @@ async function rmCommand(ctx: Ctx, args: string[]): Promise<void> {
     for (const instance of instancesOf(ctx.config).filter((candidate) => isRunning(candidate) && capture.meta.instances.includes(candidate.name))) {
       const state = await status(instance).catch(() => undefined);
       if (state?.session?.id === capture.meta.id) {
-        fail(`${capture.meta.id} is still recording on ${instance.name}; run \`dev capture stop\` first`);
+        fail(`${capture.meta.id} is still recording on ${instance.name}; run \`mcdev capture stop\` first`);
       }
     }
   }
@@ -866,15 +866,15 @@ async function probe(instance: Instance, protocol: ProtocolTable): Promise<{ ok:
     }
     return { ok: false, detail: 'connected, but the plugin never saw the login (injection did not attach?)' };
   } catch (error) {
-    return { ok: false, detail: `could not connect to port ${instance.port}: ${(error as Error).message} (if \`dev share\` is active the proxy requires the PROXY protocol)` };
+    return { ok: false, detail: `could not connect to port ${instance.port}: ${(error as Error).message} (if \`mcdev share\` is active the proxy requires the PROXY protocol)` };
   } finally {
     socket.destroy();
   }
 }
 
 function checkPlacement(handlers: string[]): { ok: boolean; text: string } | undefined {
-  const inIndex = handlers.indexOf('paradisu_capture_in');
-  const outIndex = handlers.indexOf('paradisu_capture_out');
+  const inIndex = handlers.indexOf('mcdevtools_capture_in');
+  const outIndex = handlers.indexOf('mcdevtools_capture_out');
   if (inIndex === -1 || outIndex === -1) {
     return undefined;
   }
@@ -902,7 +902,7 @@ async function doctorCommand(ctx: Ctx, args: string[]): Promise<void> {
       const hints = state.protocolHints;
       rows.push(['control socket', `${statusWord('ok')}  plugin on ${state.platform}`]);
       if (!hints.complete) {
-        rows.push(['protocol hints', `${statusWord('missing')}  run dev capture protocol, then restart this instance`]);
+        rows.push(['protocol hints', `${statusWord('missing')}  run mcdev capture protocol, then restart this instance`]);
         failed = true;
       } else if (hints.protocol !== protocol.protocolVersion) {
         rows.push(['protocol hints', `${statusWord('stale')}  plugin has ${hints.protocol}, current is ${protocol.protocolVersion}; restart this instance`]);
@@ -1006,7 +1006,7 @@ export const CAPTURE_COMMANDS: Command[] = [
     summary: 'Export a capture for other tools',
     details: 'Asks for the format when --format is missing.',
     options: [
-      { flag: '--format <name>', summary: 'Export format (see dev capture formats)' },
+      { flag: '--format <name>', summary: 'Export format (see mcdev capture formats)' },
       { flag: '--instance <names>', summary: 'Instance dumps to export' },
       { flag: '--out <dir>', summary: 'Output directory' },
       ...FILTER_DOCS,

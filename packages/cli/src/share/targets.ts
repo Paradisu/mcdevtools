@@ -28,7 +28,7 @@ export function targetSpecs(config: DevConfig): Record<ShareTarget, TargetSpec> 
       protocol: 'tcp',
       clientFacing: def.role === 'proxy',
       port: () => instance.port,
-      unavailable: () => (instance.enabled ? undefined : `${instance.name} is disabled in the dev config`),
+      unavailable: () => (instance.enabled ? undefined : `${instance.name} is disabled in the mcdev config`),
       describe: (address) => address.display,
     };
   }

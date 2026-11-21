@@ -1,4 +1,4 @@
-name: ParadisuCapture
-main: net.paradisu.capture.limbo.CaptureLimbo
+name: McDevCapture
+main: net.paradisu.mcdevtools.capture.limbo.CaptureLimbo
 version: 1.0.0
-author: Paradisu
+author: Paradisu (mcdevtools)

@@ -1,5 +1,5 @@
 /**
- * The contract between `dev share` and the services that provide tunnels.
+ * The contract between `mcdev share` and the services that provide tunnels.
  *
  * To add a provider (ngrok, Pangolin, ...): implement `ProviderFactory` in `providers/<name>.ts` (import the
  * service's SDK lazily inside `create`, so it is only loaded when selected, and make it an optional dependency),
@@ -63,7 +63,7 @@ export interface TunnelProvider {
 
 export interface ProviderFactory {
   name: string;
-  /** One line for `dev share providers` */
+  /** One line for `mcdev share providers` */
   summary: string;
   /** `options` is the [share.providers.<name>] table; validate it here and fail() with a clear message */
   create(options: Record<string, unknown>): Promise<TunnelProvider>;

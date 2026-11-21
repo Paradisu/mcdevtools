@@ -27,7 +27,7 @@ import { parse as parseSnbt, stringify } from './snbt.ts';
 import { looksLikeUuid, mojangByName, mojangByUuid, offlineUuid, parseUuid, toIntArray, toMostLeast, uuidVersion } from './uuid.ts';
 
 // ---------------------------------------------------------------------------------------------------------------
-// dev mc nbt / item / encode / uuid
+// mcdev mc nbt / item / encode / uuid
 // ---------------------------------------------------------------------------------------------------------------
 
 async function readStdin(): Promise<Buffer> {
@@ -105,7 +105,7 @@ async function itemCommand(args: string[]): Promise<void> {
     options: { format: { type: 'string' }, compact: { type: 'boolean' } },
     allowPositionals: true,
   });
-  const source = positionals[0] ?? fail('Usage: dev mc item <base64|hex|@file|-> [--format snbt|json|table]');
+  const source = positionals[0] ?? fail('Usage: mcdev mc item <base64|hex|@file|-> [--format snbt|json|table]');
   const raw = source === '-' || source.startsWith('@') ? await readInput(source) : Buffer.from(source);
   const trimmed = raw.toString('utf8').trim();
   // Text input is base64 or hex; a file may also hold the raw bytes

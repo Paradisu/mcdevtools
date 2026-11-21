@@ -56,7 +56,7 @@ function printSummary(config: DevConfig): void {
     if (tunnel.address) {
       rows.push([name, specs[name]?.describe(tunnel.address, config) ?? tunnel.address.display]);
     } else {
-      warn(`${name} is ${tunnel.status}${tunnel.error ? `: ${tunnel.error}` : ''}; see dev share logs`);
+      warn(`${name} is ${tunnel.status}${tunnel.error ? `: ${tunnel.error}` : ''}; see mcdev share logs`);
     }
   }
   if (rows.length > 0) {
@@ -79,7 +79,7 @@ async function start(config: DevConfig, args: string[]): Promise<void> {
   });
   if (daemonPid() !== undefined) {
     printSummary(config);
-    fail('Already sharing; run `dev share stop` first');
+    fail('Already sharing; run `mcdev share stop` first');
   }
   const providerName = values.provider ?? config.share.provider;
   const targets = await chooseTargets(config, positionals);
@@ -93,7 +93,7 @@ async function start(config: DevConfig, args: string[]): Promise<void> {
   if (limit !== undefined && targets.length > limit) {
     fail(
       `${provider.name} allows ${limit} tunnel${limit === 1 ? '' : 's'} at once on this account. Share fewer targets ` +
-        `(for example \`dev share start proxy\`) or configure an account token under [share.providers.${provider.name}] in config.local.toml.`,
+        `(for example \`mcdev share start proxy\`) or configure an account token under [share.providers.${provider.name}] in config.local.toml.`,
     );
   }
   if (targets.includes('web') && !webRunning(config)) {
@@ -156,7 +156,7 @@ export const SHARE_COMMANDS: Command[] = [
     summary: 'Open public tunnels and keep them renewed',
     details: 'Targets: proxy, limbo, web.',
     options: [
-      { flag: '--provider <name>', summary: 'Tunnel provider (see dev share providers)' },
+      { flag: '--provider <name>', summary: 'Tunnel provider (see mcdev share providers)' },
       { flag: '--foreground', summary: 'Run in this terminal' },
     ],
     run: ({ config }, args) => start(config, args),

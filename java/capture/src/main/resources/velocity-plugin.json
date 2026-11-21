@@ -1,7 +1,7 @@
 {
-    "id": "paradisucapture",
-    "name": "ParadisuCapture",
+    "id": "mcdevtoolscapture",
+    "name": "McDevCapture",
     "version": "${version}",
-    "main": "net.paradisu.capture.velocity.CaptureVelocity",
+    "main": "net.paradisu.mcdevtools.capture.velocity.CaptureVelocity",
     "authors": ["${authors}"]
 }

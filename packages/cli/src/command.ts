@@ -19,7 +19,7 @@ export interface Command {
   usage: string;
   /** At most 60 characters, imperative, no trailing period */
   summary: string;
-  /** Extra paragraph for `dev help <command>` */
+  /** Extra paragraph for `mcdev help <command>` */
   details?: string;
   options?: OptionDoc[];
   /** Arguments go to another program untouched (`db psql`), so `--help` is not intercepted */

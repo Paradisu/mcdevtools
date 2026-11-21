@@ -1,5 +1,5 @@
 plugins {
-    id("net.paradisu.java-conventions")
+    id("mcdevtools.java-conventions")
 }
 
 dependencies {
@@ -12,7 +12,7 @@ dependencies {
 }
 
 tasks.jar {
-    archiveFileName.set("ParadisuCapture.jar")
+    archiveFileName.set("mcdevtools-capture.jar")
 }
 
 description = "capture"

@@ -1,21 +1,20 @@
 plugins {
-    id("net.paradisu.java-conventions")
+    id("mcdevtools.java-conventions")
     application
 }
 
 dependencies {
-    implementation(project(":database"))
     implementation(libs.bundles.liquibase)
     runtimeOnly(libs.slf4j.simple)
 }
 
 application {
-    mainClass.set("net.paradisu.devtools.DevMigrate")
+    mainClass.set("net.paradisu.mcdevtools.migrate.LiquibaseRunner")
 }
 
-description = "migrate"
+description = "liquibase-runner"
 
-// `dev` only uses installDist
+// `mcdev` only uses installDist
 tasks {
     distZip { enabled = false }
     distTar { enabled = false }

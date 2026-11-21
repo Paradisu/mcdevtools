@@ -92,7 +92,7 @@ export async function listCaptures(): Promise<Capture[]> {
 export async function loadCapture(idOrPrefix: string): Promise<Capture> {
   const all = await listCaptures();
   if (all.length === 0) {
-    fail('There are no captures yet. Start one with `dev capture start`.');
+    fail('There are no captures yet. Start one with `mcdev capture start`.');
   }
   if (idOrPrefix === 'latest') {
     return all[0]!;
@@ -107,7 +107,7 @@ export async function loadCapture(idOrPrefix: string): Promise<Capture> {
   }
   throw new DevError(
     matches.length === 0
-      ? `No capture "${idOrPrefix}". See \`dev capture list\`.`
+      ? `No capture "${idOrPrefix}". See \`mcdev capture list\`.`
       : `"${idOrPrefix}" matches ${matches.length} captures: ${matches.map((m) => m.meta.id).join(', ')}`,
   );
 }

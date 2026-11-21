@@ -43,7 +43,7 @@ function signature(command: Command): string {
   return [command.name, command.usage, command.options?.length ? '[options]' : ''].filter(Boolean).join(' ');
 }
 
-/** `dev help`: commands under section headings, or only the commands of one group. */
+/** `mcdev help`: commands under section headings, or only the commands of one group. */
 export function usage(commands: Command[], group?: string): string {
   const shown = commands.filter((command) => !group || groupOf(command) === group);
   const titles = [...SECTIONS.map((section) => section.title), OTHER];
@@ -54,13 +54,13 @@ export function usage(commands: Command[], group?: string): string {
     const lines = columns(inSection.map((command) => [signature(command), dim(command.summary)]), [], 2);
     blocks.push(`${bold(title)}\n${lines.join('\n')}`);
   }
-  const heading = `Usage: dev <command> [options]${group ? ` (${group})` : ''}`;
-  return `${heading}\n\n${blocks.join('\n\n')}\n\n${dim('Run dev help <command> for options.')}\n`;
+  const heading = `Usage: mcdev <command> [options]${group ? ` (${group})` : ''}`;
+  return `${heading}\n\n${blocks.join('\n\n')}\n\n${dim('Run mcdev help <command> for options.')}\n`;
 }
 
-/** `dev help <command>` and `dev <command> --help`. */
+/** `mcdev help <command>` and `dev <command> --help`. */
 export function commandHelp(command: Command): string {
-  const lines = [`Usage: dev ${signature(command)}`, '', command.summary];
+  const lines = [`Usage: mcdev ${signature(command)}`, '', command.summary];
   if (command.details) lines.push(command.details);
   const rows = [...(command.options ?? []), ...(command.passthrough ? [] : [{ flag: '--no-input', summary: 'Never prompt' }])];
   if (rows.length > 0) {

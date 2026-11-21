@@ -1,6 +1,6 @@
-name: ParadisuCapture
+name: McDevCapture
 version: ${version}
 authors: [${authors}]
-main: net.paradisu.capture.paper.CapturePaper
+main: net.paradisu.mcdevtools.capture.paper.CapturePaper
 api-version: '${paperApiVersion}'
-description: Dev-only packet capture (controlled by the dev CLI)
+description: Dev-only packet capture (controlled by the mcdev CLI)

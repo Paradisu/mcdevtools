@@ -323,8 +323,8 @@ export async function build(config: DevConfig): Promise<void> {
 }
 
 /**
- * Re-renders an instance's preset configs from the current state (for example after `dev share` changed the
- * public addresses). Returns false when the instance has never been prepared by `dev start`.
+ * Re-renders an instance's preset configs from the current state (for example after `mcdev share` changed the
+ * public addresses). Returns false when the instance has never been prepared by `mcdev start`.
  */
 export async function rerender(config: DevConfig, name: string): Promise<boolean> {
   const instance = select(config, [name])[0]!;

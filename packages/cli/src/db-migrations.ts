@@ -3,7 +3,7 @@ import { fail } from './util.ts';
 
 /**
  * Applies a project's schema migrations to the dev database. `[db.migrations].tool` selects one; liquibase is built
- * in (see liquibase.ts). `dev db reset` drives it file by file so seed data can be loaded between changelogs.
+ * in (see liquibase.ts). `mcdev db reset` drives it file by file so seed data can be loaded between changelogs.
  */
 export interface MigrationProvider {
   /** Changelog files in order, as the tool names them (e.g. `db/changelog/001.xml`); may build the tool first */

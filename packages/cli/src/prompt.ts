@@ -3,7 +3,7 @@ import type { DevConfig } from './config.ts';
 import { type Instance, instancesOf } from './templates.ts';
 import { fail } from './util.ts';
 
-let noInput = process.env.PARADISU_DEV_NO_INPUT === '1';
+let noInput = process.env.MCDEV_NO_INPUT === '1';
 
 /** Called once by the CLI when `--no-input` is passed. */
 export function disableInput(): void {

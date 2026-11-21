@@ -135,7 +135,7 @@ export interface PinnedArtifact {
 }
 
 export interface UiConfig {
-  /** Layout `dev ui` opens: network | tabs | the name of a file in dev/layouts or dev/layouts.local */
+  /** Layout `mcdev ui` opens: network | tabs | the name of a file in dev/layouts or dev/layouts.local */
   default_layout: string;
   /** Name of the zellij session */
   session: string;
@@ -151,9 +151,9 @@ export interface WebConfig {
 export type ShareTarget = string;
 
 export interface ShareConfig {
-  /** Tunnel service: a name from `dev share providers` */
+  /** Tunnel service: a name from `mcdev share providers` */
   provider: string;
-  /** Targets `dev share start` opens when none are named */
+  /** Targets `mcdev share start` opens when none are named */
   targets: ShareTarget[];
   /** Renew this long before a provider's tunnel limit so the switch happens on our schedule */
   renew_before_seconds: number;

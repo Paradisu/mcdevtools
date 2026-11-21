@@ -131,7 +131,7 @@ function renewsIn(iso: string | undefined): string {
   return ms <= 0 ? 'now' : formatDuration(ms);
 }
 
-/** The tunnels as a table, for `dev share status` and `dev status`. */
+/** The tunnels as a table, for `mcdev share status` and `mcdev status`. */
 export function shareTable(state: ShareState | undefined): string {
   if (!state) {
     return `Sharing ${status('off')}`;

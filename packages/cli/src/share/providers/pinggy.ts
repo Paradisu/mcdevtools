@@ -32,7 +32,7 @@ export const pinggyFactory: ProviderFactory = {
     } catch (error) {
       fail(
         `The Pinggy SDK could not be loaded (${(error as Error).message}). It is an optional dependency with a native ` +
-          'addon: run `pnpm --dir dev install` and check its output.',
+          'addon: run `pnpm install` and check its output.',
       );
     }
     sdk.pinggy.setDebugLogging(false);

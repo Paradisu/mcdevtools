@@ -15,11 +15,11 @@ import { convertLegacyConfig } from './legacy-config.ts';
 import { CACHE, CONFIG_DIR, DevError, ROOT, RUN, TEMPLATES_LOCAL, capture, fail, log, warn } from './util.ts';
 
 /**
- * Profiles: one .tar.gz that carries a whole dev setup to another machine.
+ * Profiles: one .tar.gz that carries a whole mcdev setup to another machine.
  *
  *   profile.toml                 manifest (format, versions, pins, what is included)
  *   config/dev.local.toml        effective settings (servers, jvm, ui, plugin pins) merged over the importer's dev.toml
- *   config/templates.local/      config overrides (see `dev override`)
+ *   config/templates.local/      config overrides (see `mcdev override`)
  *   plugins/<platform>/<key>.jar jars that cannot be re-downloaded exactly (or all, with --embed-jars)
  *   db/<database>.dump           pg_dump -Fc
  *   worlds/<server>.tar          world directories of a stopped server
@@ -160,7 +160,7 @@ export async function exportProfile(config: DevConfig, options: ExportOptions): 
       for (const platform of plugin.platforms) {
         const entry = resolved.plugins.find((candidate) => candidate.key === plugin.key && candidate.platform === platform);
         if (!entry) {
-          warn(`${plugin.key} (${platform}) is not downloaded; run \`dev setup\`. It is left unpinned.`);
+          warn(`${plugin.key} (${platform}) is not downloaded; run \`mcdev setup\`. It is left unpinned.`);
           continue;
         }
         // Jars that cannot be fetched again byte for byte have to travel inside the archive
@@ -249,7 +249,7 @@ function readManifest(file: string): Manifest {
   if (text.status !== 0) fail(`${file} is not a profile (no profile.toml)`);
   const manifest = parse(text.stdout) as unknown as Manifest;
   if (manifest.format === undefined) fail(`${file} has no format version`);
-  if (manifest.format > FORMAT) fail(`${file} uses profile format ${manifest.format}; update your checkout of the dev tool`);
+  if (manifest.format > FORMAT) fail(`${file} uses profile format ${manifest.format}; update your mcdevtools checkout (mcdev update)`);
   return manifest;
 }
 
@@ -457,7 +457,7 @@ export async function importProfile(ctx: Ctx, file: string, options: ImportOptio
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// dev override
+// mcdev override
 // ---------------------------------------------------------------------------------------------------------------
 
 const SKIP_DIRS = new Set(['world', 'logs', 'libraries', 'cache', 'versions', '.dev', 'crash-reports']);
@@ -550,7 +550,7 @@ export const COMMANDS: Command[] = [
   {
     name: 'profile export',
     usage: '[name]',
-    summary: 'Pack the dev setup into a shareable archive',
+    summary: 'Pack the mcdev setup into a shareable archive',
     details: 'Default: everything except worlds.',
     options: [
       { flag: '--include <list>', summary: 'plugins, servers, overrides, db, worlds' },
@@ -577,7 +577,7 @@ export const COMMANDS: Command[] = [
           include = await pickMany('What should the profile include?', [
             { name: 'plugins   exact plugin versions (re-downloaded on import)', value: 'plugins' as Section, checked: true },
             { name: 'servers   Minecraft/Purpur/Velocity builds and server setup', value: 'servers' as Section, checked: true },
-            { name: 'overrides config overrides (dev override)', value: 'overrides' as Section, checked: true },
+            { name: 'overrides config overrides (mcdev override)', value: 'overrides' as Section, checked: true },
             { name: 'db        database contents', value: 'db' as Section, checked: true },
             { name: 'worlds    world files (can be large)', value: 'worlds' as Section, checked: false },
           ]);
@@ -599,7 +599,7 @@ export const COMMANDS: Command[] = [
     name: 'profile import',
     usage: '<file|name>',
     summary: 'Apply a profile (backs up current settings)',
-    details: 'Your previous settings are backed up to dev/.profile-backup.',
+    details: 'Your previous settings are backed up to .mcdevtools/.profile-backup.',
     options: [
       { flag: '--include <list>', summary: 'Only these sections' },
       { flag: '--yes', summary: 'Do not ask for confirmation' },
@@ -626,11 +626,11 @@ export const COMMANDS: Command[] = [
   {
     name: 'profile list',
     usage: '',
-    summary: 'List profiles in dev/profiles',
+    summary: 'List profiles in .mcdevtools/profiles',
     run: () => {
       const files = profileFiles();
       if (files.length === 0) {
-        log('No profiles in dev/profiles.');
+        log('No profiles in .mcdevtools/profiles.');
         return;
       }
       const rows = files.map((file) => {

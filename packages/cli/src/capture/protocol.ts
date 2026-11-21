@@ -72,7 +72,7 @@ export class ProtocolTable {
     return [...byPattern].map(([pattern, dirs]) => ({ pattern, dirs: [...dirs].sort() })).sort((a, b) => a.pattern.localeCompare(b.pattern));
   }
 
-  /** Counts of packets per state and direction, for `dev capture protocol`. */
+  /** Counts of packets per state and direction, for `mcdev capture protocol`. */
   counts(): { state: string; serverbound: number; clientbound: number }[] {
     return STATES.map((state, index) => ({
       state,
@@ -161,7 +161,7 @@ export function buildProtocol(
 
 /**
  * Packet names and the plugin's state-transition ids come from Mojang's own data generator, so a Minecraft update
- * only needs this regenerated (`dev capture protocol --refresh`), never a Java change.
+ * only needs this regenerated (`mcdev capture protocol --refresh`), never a Java change.
  */
 export async function ensureProtocol(config: DevConfig, refresh = false): Promise<ProtocolTable> {
   void config;

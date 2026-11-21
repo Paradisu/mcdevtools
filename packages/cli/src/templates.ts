@@ -89,7 +89,7 @@ export function registerTemplateVars(provider: TemplateVarProvider): void {
 /**
  * Variables available to every template as ${NAME}: this instance (SERVER_NAME, SERVER_PORT, PROXY_PORT), its
  * network (ONLINE_MODE, FORWARDING_*, VELOCITY_*), the database, and PUBLIC_HOST_<NAME> / PUBLIC_PORT_<NAME> of every
- * instance (a live `dev share` tunnel replaces the configured public address).
+ * instance (a live `mcdev share` tunnel replaces the configured public address).
  */
 export async function templateVars(config: DevConfig, instance: Instance): Promise<Record<string, string>> {
   const e: Env = env();

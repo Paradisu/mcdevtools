@@ -196,9 +196,9 @@ const COMMANDS: Command[] = [
   {
     name: 'clean',
     usage: '',
-    summary: 'Delete dev/run',
+    summary: 'Delete .mcdevtools/run',
     options: [
-      { flag: '--all', summary: 'Also delete dev/.cache' },
+      { flag: '--all', summary: 'Also delete .mcdevtools/.cache' },
     ],
     run: async ({ config }, args) => {
       const { values } = parseArgs({ args, options: { all: { type: 'boolean' } } });
@@ -242,7 +242,7 @@ function find(argv: string[]): { command: Command; args: string[] } | undefined 
 
 /** `dev` with no arguments on a terminal: a menu of top-level commands and groups. */
 async function menu(group?: string): Promise<string[]> {
-  const chosen = await pickFrom(group ? `dev ${group}` : 'What do you want to do?', menuChoices(visible(), group));
+  const chosen = await pickFrom(group ? `mcdev ${group}` : 'What do you want to do?', menuChoices(visible(), group));
   return groups().includes(chosen) && !group ? menu(chosen) : chosen.split(' ');
 }
 
@@ -284,7 +284,7 @@ async function main(argv: string[]): Promise<void> {
   }
   const found = find(argv);
   if (!found) {
-    throw new DevError(`Unknown command "${argv.join(' ')}". Run dev help.`);
+    throw new DevError(`Unknown command "${argv.join(' ')}". Run mcdev help.`);
   }
   if (!found.command.passthrough && (found.args.includes('--help') || found.args.includes('-h'))) {
     log(commandHelp(found.command));
@@ -351,7 +351,7 @@ async function bootstrap(config: DevConfig): Promise<void> {
     }
   }
   if (failed) {
-    warn('Bootstrap finished with errors. Fix the cause (network?) and run `dev bootstrap` again.');
+    warn('Bootstrap finished with errors. Fix the cause (network?) and run `mcdev bootstrap` again.');
   }
 }
 

@@ -7,7 +7,7 @@ import { type Capture, formatBytes, listCaptures, dumpInstances, summarize } fro
 import { parseCount, parseSize, parseSpan, split, validator } from './units.ts';
 
 /**
- * Interactive builders for `dev capture`: pick a capture, build a filter, describe a recording. They only run on a
+ * Interactive builders for `mcdev capture`: pick a capture, build a filter, describe a recording. They only run on a
  * terminal, and only when the command was given none of the options they ask for, so scripts and anyone who knows
  * the flags are never prompted. Each returns the same values the flags would, so the command can print the
  * equivalent command line.
@@ -32,17 +32,17 @@ async function captureChoices(): Promise<Choice<Capture>[]> {
 export async function pickCapture(message: string): Promise<Capture> {
   const choices = await captureChoices();
   if (choices.length === 0) {
-    fail('There are no captures yet. Start one with `dev capture start`.');
+    fail('There are no captures yet. Start one with `mcdev capture start`.');
   }
-  return pickFrom(message, choices, 'A capture id (see `dev capture list`)');
+  return pickFrom(message, choices, 'A capture id (see `mcdev capture list`)');
 }
 
 export async function pickCaptures(message: string): Promise<Capture[]> {
   const choices = await captureChoices();
   if (choices.length === 0) {
-    fail('There are no captures yet. Start one with `dev capture start`.');
+    fail('There are no captures yet. Start one with `mcdev capture start`.');
   }
-  return pickMany(message, choices.map((choice) => ({ ...choice, checked: false })), 'A capture id (see `dev capture list`)');
+  return pickMany(message, choices.map((choice) => ({ ...choice, checked: false })), 'A capture id (see `mcdev capture list`)');
 }
 
 export async function pickInstanceOf(capture: Capture, message: string): Promise<string> {

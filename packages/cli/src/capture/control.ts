@@ -9,7 +9,7 @@ function connect(path: string, instance: string): Promise<net.Socket> {
       reject(
         error.code === 'ENOENT' || error.code === 'ECONNREFUSED'
           ? new DevError(
-              `The capture plugin is not running on ${instance} (no control socket). Is [capture] enabled in config.toml, and was ${instance} started with \`dev start\` after that?`,
+              `The capture plugin is not running on ${instance} (no control socket). Is [capture] enabled in config.toml, and was ${instance} started with \`mcdev start\` after that?`,
             )
           : error,
       );

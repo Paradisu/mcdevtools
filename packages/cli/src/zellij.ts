@@ -154,7 +154,7 @@ export async function ui(config: DevConfig, layout: string | undefined, options:
   writeConfig(config);
   const layouts = writeLayouts(config);
   if (!layout) {
-    // Only an explicit `dev ui` asks; background sessions (dev web start) and `dev start --ui` use the default
+    // Only an explicit `mcdev ui` asks; background sessions (mcdev web start) and `mcdev start --ui` use the default
     layout = !options.background && options.ask !== false && layouts.length > 1 && interactive() ? await pickFrom('Open which layout?', layouts.map((l) => ({ name: l, value: l }))) : config.ui.default_layout;
   }
   if (!layouts.includes(layout)) {
@@ -275,7 +275,7 @@ export async function webStart(config: DevConfig): Promise<void> {
     createToken(config, false);
   }
   if (config.web.bind !== '127.0.0.1') {
-    warn('Web tokens grant a shell; give observers read-only tokens (dev web token --read-only).');
+    warn('Web tokens grant a shell; give observers read-only tokens (mcdev web token --read-only).');
   }
 }
 
@@ -338,7 +338,7 @@ export const COMMANDS: Command[] = [
   ...WEB_COMMANDS,
 ];
 
-/** After `dev start`: offer to open the consoles (never prompts without a terminal). */
+/** After `mcdev start`: offer to open the consoles (never prompts without a terminal). */
 export async function offerUi(config: DevConfig, requested: boolean): Promise<void> {
   if (requested || (await askOptional('Open the consoles in zellij?', false))) {
     await ui(config, undefined, { background: false, ask: false });
