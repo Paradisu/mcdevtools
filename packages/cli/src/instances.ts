@@ -4,7 +4,7 @@ import { basename, join } from 'node:path';
 import type { DevConfig } from './config.ts';
 import { readResolved, type ResolvedFiles } from './downloads.ts';
 import { type Instance, applyTemplates, instancesOf } from './templates.ts';
-import { CAPTURE_JAR, CAPTURE_JAR_NAME, gradle } from './java.ts';
+import { CAPTURE_JAR, CAPTURE_JAR_NAME, ensureGradleCachesWritable, gradle } from './java.ts';
 import { CACHE, RUN, ROOT, capture, fail, log, portListening, portOpen, run, sleep, waitFor, warn } from './util.ts';
 import { dbReachable } from './db.ts';
 import { readState, shareTable } from './share/state.ts';
@@ -334,6 +334,7 @@ export async function clean(all: boolean): Promise<void> {
 
 /** Runs the project's build ([build].command) and, when capture is enabled, builds the capture jar. */
 export async function build(config: DevConfig): Promise<void> {
+  ensureGradleCachesWritable();
   if (config.build.command.length > 0) {
     log(dim('Building the project'));
     run(config.build.command[0]!, config.build.command.slice(1));
