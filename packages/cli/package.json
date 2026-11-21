@@ -14,7 +14,7 @@
     "./prompt": "./src/prompt.ts",
     "./db": "./src/db.ts",
     "./util": "./src/util.ts",
-    "./tsconfig.base.json": "../../tsconfig.base.json"
+    "./tsconfig.base.json": "./tsconfig.base.json"
   },
   "scripts": {
     "dev": "node src/cli.ts",
