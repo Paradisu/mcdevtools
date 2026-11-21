@@ -33,7 +33,7 @@ Run `mcdev` for a menu, a group name (`mcdev db`, `mcdev capture`, `mcdev share`
 | Command | What it does |
 | --- | --- |
 | `mcdev bootstrap` | Build, download and seed (runs on container creation) |
-| `mcdev setup [--refresh]` | Resolve versions and download servers and plugins into `.mcdevtools/.cache` |
+| `mcdev setup [--refresh]` | Resolve versions and download servers and plugins into `.mcdevtools/.cache`, and install the sdkman JDKs the instances name |
 | `mcdev build` | Run `[build].command`, and build the capture plugin when capture is enabled |
 | `mcdev start [names] [--no-build] [--ui]` | Build, deploy to every instance, apply preset configs and run them under the console supervisor. Prints `Ready. Join at ...` when done |
 | `mcdev stop [names]` | Send the platform's stop command; the JVM is killed after 60 s |
@@ -84,7 +84,7 @@ The config is [`.mcdevtools/config.toml`](../packages/cli/scaffold/config.toml) 
 | `extensions` | Extension entry points: directories under `.mcdevtools/` (`"extensions/myproject"`) or packages resolvable from the project root. See [extensions](extensions.md) |
 | `[versions]` | `minecraft = "auto"` or a version. `auto` reads the Gradle version catalog named in `[versions.auto]` (`catalog = "gradle/libs.versions.toml"`, `minecraft_from = "paper-api"`, `velocity_from = "velocity-api"`), so bumping `paper-api` updates the dev network too. Without a catalog, set it explicitly |
 | `[build]` | `command = ["./gradlew", "-q", "shadowJar"]` run before every start; `[[build.artifacts]]` with `path` (relative to the project root) and `platforms` (plugin families `paper`, `velocity`, `limbo`): copied into matching instances on every start |
-| `[java]` | `enhanced_redefinition`, `hotswap_agent`, `hotswap_plugins`, `extra_flags` |
+| `[java]` | `enhanced_redefinition`, `hotswap_agent`, `hotswap_plugins`, `extra_flags`, and `[java.defaults]` (JDK per instance type) |
 | `[db]`, `[db.migrations]`, `[redis]` | See [Database](#database-and-migration-testing). Without `[db]` nothing database-related exists and `start` does not wait for PostgreSQL |
 | `[[networks]]` | `name`, `forwarding` (`auto` or `modern`), optional `online_mode` |
 | `[[instances]]` | One server process: see below |
@@ -95,15 +95,16 @@ The config is [`.mcdevtools/config.toml`](../packages/cli/scaffold/config.toml) 
 
 ### Instances and networks
 
-An instance has a `name` (also its folder under `.mcdevtools/run/`), a `type` ([platform](platforms.md): `purpur`, `velocity`, `limbo`), `port`, `debug_port` (JDWP), `memory`, `enabled`, `first_start_commands`, and optionally:
+An instance has a `name` (also its folder under `.mcdevtools/run/`), a `type` ([platform](platforms.md): `purpur`, `paper`, `folia`, `paper-fork`, `velocity`, `limbo`), `port`, `debug_port` (JDWP), `memory`, `enabled`, `first_start_commands`, and optionally:
 
 - `network = "<name>"`: part of that network. A proxy needs one; a backend in a network is listed in its proxy's server list (`try = true` puts it in the `try` order); an instance without a network is **standalone** (Limbo, or any server you want to start but not route to).
-- `version`, `build`: `"auto"` (the default) or an exact value to pin: a Minecraft version / build number for `purpur`, a Velocity version / build id for `velocity`, a Limbo build for `limbo`.
+- `version`, `build`: `"auto"` (the default) or an exact value to pin: a Minecraft version / build number for `purpur`, `paper` and `folia`, a Velocity version / build id for `velocity`, a Limbo build for `limbo`.
+- `java`: the JDK to run on, a sdkman candidate id or an absolute path ([platforms](platforms.md#jdks)); `[java.defaults]` sets one per instance type.
 - `public_port`: the port clients use when it differs from `port` (a remapped container port).
 - `world_preset` (backends): `redstone_ready` (flat: bedrock, 3 stone, 116 sandstone), `void` or `default`.
 - Any other key is kept for extensions (`instance.config.extra`), for example a project-specific `context`.
 
-At most one proxy per network and `forwarding = "modern"` are supported today (see [platforms](platforms.md)). Ports and names must be unique; `mcdev` validates this at startup and names the offending instance.
+A network may have several proxies; `forwarding = "modern"` is the only mode today (see [platforms](platforms.md)). Ports and names must be unique; `mcdev` validates this at startup and names the offending instance.
 
 ### Plugins
 
