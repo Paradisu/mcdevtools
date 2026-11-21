@@ -184,3 +184,21 @@ test('java specs resolve to sdkman candidates, absolute paths or the PATH java',
   assert.equal(javaMajor(join(fake, 'java')), 17);
   assert.equal(javaMajor('/definitely/not/java'), undefined);
 });
+
+test('restoreDefault removes a default sdkman created and puts back one it changed', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'mcdev-sdk-default-'));
+  process.env.SDKMAN_DIR = dir;
+  const { readDefault, restoreDefault } = await import('../src/jdk.ts');
+  const java = join(dir, 'candidates', 'java');
+  mkdirSync(java, { recursive: true });
+  const { symlinkSync } = await import('node:fs');
+  assert.equal(readDefault(), undefined);
+  symlinkSync(join(java, '21'), join(java, 'current'));
+  restoreDefault(undefined);
+  assert.equal(readDefault(), undefined, 'a default that did not exist before is removed');
+  symlinkSync(join(java, '17'), join(java, 'current'));
+  restoreDefault(join(java, '17'));
+  assert.equal(readDefault(), join(java, '17'), 'an unchanged default is left alone');
+  restoreDefault(join(java, '8'));
+  assert.equal(readDefault(), join(java, '8'), 'a changed default is put back');
+});
