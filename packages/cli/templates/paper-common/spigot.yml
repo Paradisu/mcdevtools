@@ -1,0 +1,4 @@
+# Partial config; Spigot fills in the rest. Rendered by mcdevtools (overwritten on `mcdev start`).
+# BungeeCord-style (legacy) forwarding, when the network's proxies use it.
+settings:
+  bungeecord: ${BUNGEECORD_ENABLED}

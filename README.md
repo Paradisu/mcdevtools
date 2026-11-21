@@ -6,6 +6,7 @@ A local development network for Minecraft plugin projects, driven by one CLI (`m
 - Debugging and hot reload (JetBrains Runtime, HotswapAgent), zellij console workspaces, public tunnels, shareable setups.
 - Packet capture on every server, with export to Flashback, ReplayMod, Sniffcraft and JSON lines.
 - Optional PostgreSQL and Redis with seeded migrations (Liquibase built in).
+- Server types: Purpur, Paper, Folia and other Paper forks, Velocity, BungeeCord, Waterfall, ViaProxy, Fabric, Forge, NeoForge, SpongeVanilla and Limbo, in networks with several proxies or standalone, each on its own JDK if needed.
 - Extensible: a project adds its own commands, server types and hooks in TypeScript, in `.mcdevtools/extensions/`.
 
 It was extracted from [ParadisuPlugin](https://github.com/Paradisu/ParadisuPlugin), which uses it as a git submodule.

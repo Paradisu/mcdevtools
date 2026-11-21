@@ -206,3 +206,12 @@ export function deepMerge(base: Json, override: Json): Json {
   }
   return merged;
 }
+
+/** GET a URL and return the body as text (XML metadata and the like). */
+export async function getText(url: string): Promise<string> {
+  const response = await fetch(url, { headers: { 'User-Agent': USER_AGENT }, redirect: 'follow' });
+  if (!response.ok) {
+    fail(`GET ${url} failed: ${response.status} ${response.statusText}`);
+  }
+  return response.text();
+}

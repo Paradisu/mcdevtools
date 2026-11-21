@@ -33,6 +33,7 @@ import {
   pickInstancesOf,
   recordingFlags,
 } from './wizard.ts';
+import { capturableOf } from '../platforms/index.ts';
 import { linkOf, proxyNames, receiverOf } from './receivers.ts';
 import {
   type Capture,
@@ -73,18 +74,23 @@ async function runningTargets(ctx: Ctx, names: string[], message: string): Promi
   const all = instancesOf(ctx.config);
   if (names.length > 0) {
     const picked = names.map((name) => instanceNamed(ctx.config, name));
+    const unsupported = picked.filter((instance) => !capturableOf(instance.def));
+    if (unsupported.length > 0) {
+      fail(`Packet capture is not available on ${unsupported.map((instance) => `${instance.name} (${instance.def.type})`).join(', ')}`);
+    }
     const down = picked.filter((instance) => !isRunning(instance));
     if (down.length > 0) {
       fail(`${down.map((instance) => instance.name).join(', ')} ${down.length === 1 ? 'is' : 'are'} not running`);
     }
     return picked;
   }
-  const running = all.filter((instance) => isRunning(instance));
+  // Platforms without the capture plugin (BungeeCord, mod loaders, ...) are left out
+  const running = all.filter((instance) => isRunning(instance) && capturableOf(instance.def));
   if (running.length === 0) {
-    fail('Nothing is running. Start the network with `mcdev start`.');
+    fail('Nothing that supports capture is running. Start the network with `mcdev start`.');
   }
   if (interactive() && running.length > 1) {
-    const chosen = await pickInstances(ctx.config, message, (instance) => isRunning(instance));
+    const chosen = await pickInstances(ctx.config, message, (instance) => isRunning(instance) && capturableOf(instance.def));
     return all.filter((instance) => chosen.includes(instance.name) && isRunning(instance));
   }
   return running;

@@ -37,4 +37,6 @@ export const LIMBO: PlatformDef = {
   hotswap: false,
   worlds: false,
   installsProjectArtifacts: false,
+  capture: 'plugin',
+  forwarding: ['none'],
 };

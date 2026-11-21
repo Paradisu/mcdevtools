@@ -34,4 +34,6 @@ export const VELOCITY: PlatformDef = {
   hotswap: true,
   worlds: false,
   installsProjectArtifacts: true,
+  capture: 'plugin',
+  forwarding: ['modern', 'legacy', 'none'],
 };

@@ -3,8 +3,8 @@ import { existsSync } from 'node:fs';
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import { type DevConfig, type Env, type InstanceConfig, type NetworkConfig, type Platform, env } from './config.ts';
-import { type PlatformDef, platformOf } from './platforms/index.ts';
-import { networkOf, proxiesOf, serversOf, varName } from './topology.ts';
+import { type PlatformDef, configDirOf, platformOf } from './platforms/index.ts';
+import { networkOf, proxiesOf, resolveForwarding, serversOf, varName } from './topology.ts';
 import { shareAddresses, shareProxyProtocol } from './share/state.ts';
 import { CORE_TEMPLATES, ROOT, RUN, TEMPLATES, TEMPLATES_LOCAL, render } from './util.ts';
 
@@ -46,7 +46,17 @@ export function instancesOf(config: DevConfig): Instance[] {
 }
 
 /** Directory of each layer's templates that applies to a plugin family */
-const BASE_TEMPLATE: Record<Platform, string> = { velocity: 'proxy', paper: 'paper-common', limbo: 'limbo' };
+const BASE_TEMPLATE: Record<Platform, string[]> = {
+  velocity: ['proxy'],
+  paper: ['vanilla', 'paper-common'],
+  limbo: ['limbo'],
+  bungee: ['bungee'],
+  viaproxy: ['viaproxy'],
+  fabric: ['vanilla'],
+  forge: ['vanilla'],
+  neoforge: ['vanilla'],
+  sponge: ['vanilla'],
+};
 
 const WORLD_PRESETS = {
   redstone_ready: {
@@ -99,6 +109,7 @@ export async function templateVars(config: DevConfig, instance: Instance): Promi
   const velocityTry = velocityServers.filter((server) => server.try);
   const proxy = network ? proxiesOf(config, network.name)[0] : undefined;
   const forwarding = network ? await forwardingSecret(network.name) : { secret: '', file: '' };
+  const forwardingMode = network ? resolveForwarding(config, network) : 'none';
   const shared = shareAddresses();
   const publicAddresses: Record<string, string> = {};
   for (const other of config.instances) {
@@ -114,7 +125,9 @@ export async function templateVars(config: DevConfig, instance: Instance): Promi
     SERVER_NAME: instance.name,
     SERVER_PORT: String(instance.port),
     ONLINE_MODE: String(network?.online_mode ?? config.online_mode),
-    FORWARDING_MODE: 'modern',
+    FORWARDING_MODE: forwardingMode,
+    VELOCITY_ENABLED: String(forwardingMode === 'modern'),
+    BUNGEECORD_ENABLED: String(forwardingMode === 'legacy'),
     FORWARDING_SECRET: forwarding.secret,
     FORWARDING_SECRET_FILE: forwarding.file,
     DB_HOST: e.db.host,
@@ -127,6 +140,8 @@ export async function templateVars(config: DevConfig, instance: Instance): Promi
     GENERATOR_SETTINGS: preset.generatorSettings,
     VELOCITY_SERVERS: velocityServers.map((server) => `${server.name} = "127.0.0.1:${server.port}"`).join('\n'),
     VELOCITY_TRY: `[${velocityTry.map((server) => `"${server.name}"`).join(', ')}]`,
+    BUNGEE_SERVERS: velocityServers.map((server) => `  ${server.name}:\n    motd: ${server.name}\n    address: 127.0.0.1:${server.port}\n    restricted: false`).join('\n'),
+    BUNGEE_PRIORITIES: `[${(velocityTry.length > 0 ? velocityTry : velocityServers).map((server) => server.name).join(', ')}]`,
   };
   for (const provider of varProviders) Object.assign(vars, await provider(config, instance, vars));
   return vars;
@@ -158,16 +173,16 @@ export async function applyTemplates(
   installedPlugins: string[],
 ): Promise<void> {
   const vars = await templateVars(config, instance);
-  const base = BASE_TEMPLATE[instance.platform];
+  const bases = BASE_TEMPLATE[instance.platform];
   // Layers, later ones win: templates shipped with mcdevtools, the project's (.mcdevtools/templates), then
   // personal overrides (.mcdevtools/templates.local, exported by profiles). Each has the same layout.
   for (const layer of [CORE_TEMPLATES, TEMPLATES, TEMPLATES_LOCAL]) {
-    await overlay(join(layer, base), instance.dir, vars);
+    for (const base of bases) await overlay(join(layer, base), instance.dir, vars);
     await overlay(join(layer, 'servers', instance.name), instance.dir, vars);
     for (const key of installedPlugins) {
       const plugin = config.plugins.find((candidate) => candidate.key === key);
       const folder = plugin?.config_dir?.[instance.platform] ?? key;
-      await overlay(join(layer, 'plugins', key, instance.platform), join(instance.dir, 'plugins', folder), vars);
+      await overlay(join(layer, 'plugins', key, instance.platform), join(instance.dir, configDirOf(instance.def), folder), vars);
     }
   }
 }

@@ -19,6 +19,8 @@ const BACKEND: Omit<PlatformDef, 'type' | 'label' | 'resolve' | 'cacheName'> = {
   hotswap: true,
   worlds: true,
   installsProjectArtifacts: true,
+  capture: 'plugin',
+  forwarding: ['modern', 'legacy', 'none'],
 };
 
 /** A PaperMC Fill project that publishes server jars per Minecraft version (paper, folia). */

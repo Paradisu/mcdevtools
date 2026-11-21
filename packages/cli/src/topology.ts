@@ -1,5 +1,5 @@
-import type { DevConfig, InstanceConfig, NetworkConfig } from './config.ts';
-import { platformOf } from './platforms/index.ts';
+import type { DevConfig, InstanceConfig, NetworkConfig, ResolvedForwarding } from './config.ts';
+import { forwardingOf, platformOf } from './platforms/index.ts';
 import { fail } from './util.ts';
 
 export function networkOf(config: DevConfig, instance: InstanceConfig): NetworkConfig | undefined {
@@ -19,6 +19,29 @@ export function serversOf(config: DevConfig, network: string): InstanceConfig[] 
 /** Instances outside every network: standalone servers. */
 export function standalone(config: DevConfig): InstanceConfig[] {
   return config.instances.filter((i) => !i.network);
+}
+
+/**
+ * The forwarding mode a network runs with. `auto` takes the best mode every member supports (modern, then legacy,
+ * then none); an explicit mode must be supported by all members, otherwise the ones that cannot are named.
+ */
+export function resolveForwarding(config: DevConfig, network: NetworkConfig): ResolvedForwarding {
+  // Members with an empty forwarding list (ViaProxy) take no part in it
+  const members = config.instances.filter((i) => i.enabled && i.network === network.name && forwardingOf(platformOf(i.type)).length > 0);
+  const unsupported = (mode: ResolvedForwarding) => members.filter((i) => !forwardingOf(platformOf(i.type)).includes(mode));
+  if (network.forwarding !== 'auto') {
+    const bad = unsupported(network.forwarding);
+    if (bad.length > 0) {
+      fail(`Network "${network.name}": forwarding = "${network.forwarding}" is not supported by ${bad.map((i) => `${i.name} (${i.type})`).join(', ')}`);
+    }
+    return network.forwarding;
+  }
+  for (const mode of ['modern', 'legacy', 'none'] as const) {
+    if (unsupported(mode).length === 0) {
+      return mode;
+    }
+  }
+  return fail(`Network "${network.name}" has no forwarding mode all its members support`);
 }
 
 /** Name used in template variables: `lobby-2` -> `LOBBY_2`. */
@@ -57,8 +80,8 @@ export function validateTopology(config: DevConfig): void {
       fail(`Duplicate network "${network.name}"`);
     }
     networks.add(network.name);
-    if (network.forwarding !== 'auto' && network.forwarding !== 'modern') {
-      fail(`Network "${network.name}": forwarding = "${network.forwarding}" is not supported yet (use "auto" or "modern")`);
+    if (!['auto', 'modern', 'legacy', 'none'].includes(network.forwarding)) {
+      fail(`Network "${network.name}": forwarding must be auto, modern, legacy or none`);
     }
   }
 
@@ -77,6 +100,10 @@ export function validateTopology(config: DevConfig): void {
     if (proxies.length === 0) {
       fail(`Network "${network.name}" has no proxy`);
     }
+  }
+
+  for (const network of config.networks) {
+    resolveForwarding(config, network);
   }
 
   const ports = new Map<number, string>();

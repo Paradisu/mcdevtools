@@ -4,6 +4,7 @@ import { basename, join } from 'node:path';
 import type { DevConfig } from './config.ts';
 import { readResolved, type ResolvedFiles } from './downloads.ts';
 import { type Instance, applyTemplates, instancesOf } from './templates.ts';
+import { capturableOf, pluginsDirOf } from './platforms/index.ts';
 import { CAPTURE_JAR, CAPTURE_JAR_NAME, ensureGradleCachesWritable, gradle } from './java.ts';
 import { CACHE, RUN, ROOT, capture, fail, log, portListening, portOpen, run, sleep, waitFor, warn } from './util.ts';
 import { dbReachable } from './db.ts';
@@ -56,16 +57,26 @@ function jvmFlags(config: DevConfig, javaBin: string): { flags: string[]; enhanc
   return result;
 }
 
-async function prepare(config: DevConfig, resolved: ResolvedFiles, instance: Instance, withCapture: boolean): Promise<void> {
-  await mkdir(join(instance.dir, 'plugins'), { recursive: true });
+async function prepare(config: DevConfig, resolved: ResolvedFiles, instance: Instance, withCapture: boolean, javaBin: string): Promise<void> {
+  const pluginsDir = pluginsDirOf(instance.def);
+  await mkdir(join(instance.dir, pluginsDir), { recursive: true });
   const server = resolved.servers[instance.name] ?? fail(`${instance.name} has not been downloaded; run \`mcdev setup\``);
   await copyFile(server.file, join(instance.dir, 'server.jar'));
+  if (instance.def.prepare) {
+    // Installers (Forge, NeoForge) write libraries next to the jar; run again only when the jar changed
+    const marker = join(instance.dir, '.dev-prepared');
+    const stamp = server.sha256;
+    if (!existsSync(marker) || (await readFile(marker, 'utf8')) !== stamp) {
+      await instance.def.prepare({ config, instance: instance.config, dir: instance.dir, javaBin });
+      await writeFile(marker, stamp);
+    }
+  }
   if (instance.def.needsEula) {
     await writeFile(join(instance.dir, 'eula.txt'), 'eula=true\n');
   }
 
   // Copy (never symlink) jars: rebuilding a jar under a running JVM corrupts its open zip
-  const manifestPath = join(instance.dir, 'plugins', '.dev-managed.json');
+  const manifestPath = join(instance.dir, pluginsDirOf(instance.def), '.dev-managed.json');
   const previous: string[] = existsSync(manifestPath) ? JSON.parse(await readFile(manifestPath, 'utf8')) : [];
   const wanted = new Map<string, string>();
   const installedKeys: string[] = [];
@@ -89,10 +100,10 @@ async function prepare(config: DevConfig, resolved: ResolvedFiles, instance: Ins
     wanted.set(CAPTURE_JAR_NAME, CAPTURE_JAR);
   }
   for (const stale of previous.filter((name) => !wanted.has(name))) {
-    await rm(join(instance.dir, 'plugins', stale), { force: true });
+    await rm(join(instance.dir, pluginsDir, stale), { force: true });
   }
   for (const [name, source] of wanted) {
-    await copyFile(source, join(instance.dir, 'plugins', name));
+    await copyFile(source, join(instance.dir, pluginsDir, name));
   }
   await writeFile(manifestPath, JSON.stringify([...wanted.keys()]));
 
@@ -113,9 +124,9 @@ async function launch(config: DevConfig, minecraft: string, instance: Instance, 
     `-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:${instance.debugPort}`,
     // stdin is a pipe owned by the supervisor, not a terminal: use the plain console reader, but keep colours
     ...(instance.def.terminalFlags ? ['-Dterminal.jline=false', '-Dterminal.ansi=true'] : []),
-    '-jar',
-    'server.jar',
-    ...(instance.def.nogui ? ['--nogui'] : []),
+    ...(instance.def.launch
+      ? instance.def.launch({ config, instance: instance.config, dir: instance.dir, javaBin })
+      : ['-jar', 'server.jar', ...(instance.def.nogui ? ['--nogui'] : [])]),
   ];
   await spawnSupervisor(instance, {
     cmd: javaBin,
@@ -131,6 +142,10 @@ function stopCommand(instance: Instance): string {
 
 /** The current log file: most servers write logs/latest.log, Limbo names logs after its start time. */
 function logFile(instance: Instance): string | undefined {
+  if (instance.def.logFile) {
+    const path = join(instance.dir, instance.def.logFile);
+    return existsSync(path) ? path : undefined;
+  }
   const dir = join(instance.dir, 'logs');
   if (!existsSync(dir)) {
     return undefined;
@@ -205,7 +220,7 @@ export async function start(config: DevConfig, names: string[], noBuild: boolean
     // An instance may run on another JDK (sdkman id or path); on a terminal a missing one is offered for install
     const javaBin = await ensureJava(javaSpec(config, instance.config), 'ask');
     const { flags, enhanced } = jvmFlags(config, javaBin);
-    let withCapture = config.capture.enabled;
+    let withCapture = config.capture.enabled && capturableOf(instance.def);
     if (withCapture && javaBin !== 'java') {
       const major = javaMajor(javaBin);
       if (major !== undefined && major < CAPTURE_MIN_JAVA) {
@@ -213,7 +228,7 @@ export async function start(config: DevConfig, names: string[], noBuild: boolean
         withCapture = false;
       }
     }
-    await prepare(config, resolved, instance, withCapture);
+    await prepare(config, resolved, instance, withCapture, javaBin);
     // HotswapAgent only exists in JetBrains Runtime
     const agent = config.java.hotswap_agent && enhanced ? hotswapFlags(instance.def, groups, config.java.hotswap_plugins) : [];
     await launch(config, resolved.minecraft, instance, [...new Set([...flags, ...agent])], javaBin, withCapture);
@@ -351,7 +366,7 @@ export async function build(config: DevConfig): Promise<void> {
  */
 export async function rerender(config: DevConfig, name: string): Promise<boolean> {
   const instance = select(config, [name])[0]!;
-  const manifestPath = join(instance.dir, 'plugins', '.dev-managed.json');
+  const manifestPath = join(instance.dir, pluginsDirOf(instance.def), '.dev-managed.json');
   if (!existsSync(manifestPath)) {
     return false;
   }

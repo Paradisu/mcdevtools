@@ -12,7 +12,7 @@ Record, inspect and export the packets of the running dev network. Part of the [
 
 `mcdev capture` records the packets of the running dev network, for debugging protocol-level problems: forwarding between the proxy and a backend, transfers to Limbo, plugin messages, the configuration phase. It sees the decoded frames of **both** legs of the proxy (client to proxy, and proxy to each backend) and of every backend and Limbo, which an external MITM proxy such as SniffCraft cannot. Captures are compressed (gzip), live in `.mcdevtools/captures/<id>/` (gitignored, not part of profiles) and can be read back with filters, exported for other tools, or followed live.
 
-The recorder is a separate small plugin, `java/capture` (`mcdevtools-capture.jar`), which `mcdev start` installs on the proxy, Limbo and every backend. While nothing is recorded it only follows each connection's login state; recording copies frames to a queue that a background thread compresses, and when that queue fills up packets are dropped and counted instead of slowing the server. Set `[capture] enabled = false` in `config.local.toml` to leave it out (restart the instances after changing it).
+The recorder is a separate small plugin, `java/capture` (`mcdevtools-capture.jar`), which `mcdev start` installs on the platforms that support it (Paper-family backends, Velocity, Limbo; see [platforms](platforms.md)). While nothing is recorded it only follows each connection's login state; recording copies frames to a queue that a background thread compresses, and when that queue fills up packets are dropped and counted instead of slowing the server. Set `[capture] enabled = false` in `config.local.toml` to leave it out (restart the instances after changing it).
 
 
 ## Quick start

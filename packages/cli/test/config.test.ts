@@ -202,3 +202,52 @@ test('restoreDefault removes a default sdkman created and puts back one it chang
   restoreDefault(join(java, '8'));
   assert.equal(readDefault(), join(java, '8'), 'a changed default is put back');
 });
+
+test('forwarding resolves to the best mode every member supports', async () => {
+  const { resolveForwarding } = await import('../src/topology.ts');
+  const net = (extra: string, forwarding = 'auto') =>
+    `[[networks]]\nname = "main"\nforwarding = "${forwarding}"\n` + extra;
+  const inst = (name: string, type: string, port: number, network = 'main') =>
+    `[[instances]]\nname = "${name}"\ntype = "${type}"\nnetwork = "${network}"\nport = ${port}\ndebug_port = ${port + 1000}\n`;
+  const load = async (text: string) => {
+    write('config.toml', text);
+    const config = await loadConfig();
+    return { config, mode: () => resolveForwarding(config, config.networks[0]!) };
+  };
+  assert.equal((await load(net(inst('p', 'velocity', 1) + inst('b', 'purpur', 2)))).mode(), 'modern');
+  assert.equal((await load(net(inst('p', 'waterfall', 1) + inst('b', 'purpur', 2)))).mode(), 'legacy');
+  assert.equal((await load(net(inst('p', 'velocity', 1) + inst('b', 'fabric', 2)))).mode(), 'none');
+  assert.equal((await load(net(inst('p', 'velocity', 1) + inst('b', 'fabric', 2) + inst('v', 'viaproxy', 3)))).mode(), 'none');
+  // ViaProxy takes no part in forwarding
+  assert.equal((await load(net(inst('p', 'velocity', 1) + inst('b', 'purpur', 2) + inst('v', 'viaproxy', 3)))).mode(), 'modern');
+  const bad = await load(net(inst('p', 'velocity', 1) + inst('b', 'fabric', 2), 'modern'));
+  assert.throws(() => bad.mode(), /not supported by b \(fabric\)/);
+  assert.throws(() => validateTopology(bad.config), /not supported by b \(fabric\)/);
+});
+
+test('template variables follow the resolved forwarding mode and render a BungeeCord server list', async () => {
+  const { instancesOf, templateVars } = await import('../src/templates.ts');
+  write('config.toml', '[[networks]]\nname = "main"\n[[instances]]\nname = "p"\ntype = "waterfall"\nnetwork = "main"\nport = 25565\ndebug_port = 5005\n[[instances]]\nname = "lobby"\ntype = "purpur"\nnetwork = "main"\nport = 30066\ndebug_port = 5006\ntry = true\n');
+  const config = await loadConfig();
+  const vars = await templateVars(config, instancesOf(config).find((i) => i.name === 'lobby')!);
+  assert.equal(vars.FORWARDING_MODE, 'legacy');
+  assert.equal(vars.VELOCITY_ENABLED, 'false');
+  assert.equal(vars.BUNGEECORD_ENABLED, 'true');
+  assert.match(vars.BUNGEE_SERVERS!, /^  lobby:\n    motd: lobby\n    address: 127\.0\.0\.1:30066/);
+  assert.equal(vars.BUNGEE_PRIORITIES, '[lobby]');
+});
+
+test('ViaProxy arguments find their target and the modded platforms use mods/', async () => {
+  const { viaProxyArgs } = await import('../src/platforms/proxies.ts');
+  const { pluginsDirOf, configDirOf, capturableOf, platformOf } = await import('../src/platforms/index.ts');
+  write('config.toml', '[[networks]]\nname = "main"\n[[instances]]\nname = "p"\ntype = "velocity"\nnetwork = "main"\nport = 25565\ndebug_port = 5005\n[[instances]]\nname = "via"\ntype = "viaproxy"\nnetwork = "main"\nport = 25570\ndebug_port = 5006\ntarget_version = "1.8"\n');
+  const config = await loadConfig();
+  const via = config.instances.find((i) => i.name === 'via')!;
+  assert.deepEqual(viaProxyArgs(config.instances, via), ['cli', '--bind-address', '0.0.0.0:25570', '--target-address', '127.0.0.1:25565', '--auth-method', 'NONE', '--target-version', '1.8']);
+  assert.throws(() => viaProxyArgs(config.instances, { ...via, extra: { target: 'ghost' } }), /not an instance/);
+  assert.equal(pluginsDirOf(platformOf('fabric')), 'mods');
+  assert.equal(configDirOf(platformOf('forge')), 'config');
+  assert.equal(pluginsDirOf(platformOf('purpur')), 'plugins');
+  assert.equal(capturableOf(platformOf('neoforge')), false);
+  assert.equal(capturableOf(platformOf('folia')), true);
+});

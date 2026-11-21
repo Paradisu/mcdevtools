@@ -3,6 +3,6 @@
 _version: 31
 proxies:
   velocity:
-    enabled: true
+    enabled: ${VELOCITY_ENABLED}
     online-mode: ${ONLINE_MODE}
     secret: '${FORWARDING_SECRET}'

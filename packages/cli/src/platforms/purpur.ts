@@ -56,4 +56,6 @@ export const PURPUR_PLATFORM: PlatformDef = {
   hotswap: true,
   worlds: true,
   installsProjectArtifacts: true,
+  capture: 'plugin',
+  forwarding: ['modern', 'legacy', 'none'],
 };

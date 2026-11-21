@@ -1,0 +1,18 @@
+# Partial config; BungeeCord fills in the rest. Rendered by mcdevtools (overwritten on `mcdev start`).
+listeners:
+- host: 0.0.0.0:${PROXY_PORT}
+  query_port: ${PROXY_PORT}
+  query_enabled: false
+  motd: '${PROJECT_NAME} development network'
+  max_players: 500
+  priorities: ${BUNGEE_PRIORITIES}
+  force_default_server: false
+  ping_passthrough: false
+  tab_size: 60
+  tab_list: GLOBAL_PING
+  forced_hosts: {}
+servers:
+${BUNGEE_SERVERS}
+ip_forward: ${BUNGEECORD_ENABLED}
+online_mode: ${ONLINE_MODE}
+player_limit: -1

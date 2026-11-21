@@ -86,7 +86,7 @@ The config is [`.mcdevtools/config.toml`](../packages/cli/scaffold/config.toml) 
 | `[build]` | `command = ["./gradlew", "-q", "shadowJar"]` run before every start; `[[build.artifacts]]` with `path` (relative to the project root) and `platforms` (plugin families `paper`, `velocity`, `limbo`): copied into matching instances on every start |
 | `[java]` | `enhanced_redefinition`, `hotswap_agent`, `hotswap_plugins`, `extra_flags`, and `[java.defaults]` (JDK per instance type) |
 | `[db]`, `[db.migrations]`, `[redis]` | See [Database](#database-and-migration-testing). Without `[db]` nothing database-related exists and `start` does not wait for PostgreSQL |
-| `[[networks]]` | `name`, `forwarding` (`auto` or `modern`), optional `online_mode` |
+| `[[networks]]` | `name`, `forwarding` (`auto`, `modern`, `legacy`, `none`), optional `online_mode` |
 | `[[instances]]` | One server process: see below |
 | `[[plugins]]` | Downloaded plugins: see below |
 | `[ui]`, `[web]` | zellij layout and session (the session defaults to the project folder's name); web console port and bind |
@@ -95,7 +95,7 @@ The config is [`.mcdevtools/config.toml`](../packages/cli/scaffold/config.toml) 
 
 ### Instances and networks
 
-An instance has a `name` (also its folder under `.mcdevtools/run/`), a `type` ([platform](platforms.md): `purpur`, `paper`, `folia`, `paper-fork`, `velocity`, `limbo`), `port`, `debug_port` (JDWP), `memory`, `enabled`, `first_start_commands`, and optionally:
+An instance has a `name` (also its folder under `.mcdevtools/run/`), a `type` ([platform](platforms.md): `purpur`, `paper`, `folia`, `paper-fork`, `velocity`, `waterfall`, `bungeecord`, `viaproxy`, `fabric`, `forge`, `neoforge`, `sponge`, `limbo`), `port`, `debug_port` (JDWP), `memory`, `enabled`, `first_start_commands`, and optionally:
 
 - `network = "<name>"`: part of that network. A proxy needs one; a backend in a network is listed in its proxy's server list (`try = true` puts it in the `try` order); an instance without a network is **standalone** (Limbo, or any server you want to start but not route to).
 - `version`, `build`: `"auto"` (the default) or an exact value to pin: a Minecraft version / build number for `purpur`, `paper` and `folia`, a Velocity version / build id for `velocity`, a Limbo build for `limbo`.
@@ -104,7 +104,7 @@ An instance has a `name` (also its folder under `.mcdevtools/run/`), a `type` ([
 - `world_preset` (backends): `redstone_ready` (flat: bedrock, 3 stone, 116 sandstone), `void` or `default`.
 - Any other key is kept for extensions (`instance.config.extra`), for example a project-specific `context`.
 
-A network may have several proxies; `forwarding = "modern"` is the only mode today (see [platforms](platforms.md)). Ports and names must be unique; `mcdev` validates this at startup and names the offending instance.
+A network may have several proxies, and `forwarding` is `auto`, `modern`, `legacy` or `none` (see [platforms](platforms.md)). Ports and names must be unique; `mcdev` validates this at startup and names the offending instance.
 
 ### Plugins
 

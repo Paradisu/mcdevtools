@@ -20,7 +20,7 @@ minecraft = "auto"
 [capture]
 enabled = true
 
-# One proxy and one backend. Types: purpur, paper, folia, paper-fork, velocity, limbo (dev/docs/platforms.md)
+# One proxy and one backend. Types: purpur, paper, folia, paper-fork, velocity, waterfall, bungeecord, viaproxy, fabric, forge, neoforge, sponge, limbo (dev/docs/platforms.md)
 [[networks]]
 name = "main"
 

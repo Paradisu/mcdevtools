@@ -1,4 +1,4 @@
-import type { DevConfig, InstanceConfig, Platform } from '../config.ts';
+import type { DevConfig, InstanceConfig, Platform, ResolvedForwarding } from '../config.ts';
 import type { Artifact } from '../versions.ts';
 
 /** A proxy fronts a network; a server is a backend or a standalone server. */
@@ -9,6 +9,15 @@ export interface ServerArtifact extends Artifact {
   /** Display and pin version of the product (Velocity 3.4.0-SNAPSHOT, a Limbo build, a Minecraft version) */
   version: string;
   build?: string;
+}
+
+export interface PrepareCtx {
+  config: DevConfig;
+  instance: InstanceConfig;
+  /** The instance directory */
+  dir: string;
+  /** The `java` binary the instance runs on */
+  javaBin: string;
 }
 
 export interface ResolveCtx {
@@ -46,6 +55,8 @@ export interface PlatformDef {
   stopCommand: string;
   /** Appears in the log once the server accepts commands */
   readyPattern: RegExp;
+  /** The log file relative to the instance directory (default `logs/latest.log`) */
+  logFile?: string;
   /** Logs are named after the start time instead of `logs/latest.log` */
   timestampedLogs: boolean;
   /** Also wait for the port to open right after launch */
@@ -54,6 +65,21 @@ export interface PlatformDef {
   hotswap: boolean;
   /** Has world folders (reset-world, profile worlds, player data) */
   worlds: boolean;
+  /** Forwarding modes it can take part in (default: only `none`). A network picks the best one all its members share */
+  forwarding?: ResolvedForwarding[];
+  /** Folder under the instance directory that holds plugin or mod jars (default `plugins`) */
+  pluginsDir?: string;
+  /** Folder under the instance directory that holds plugin config folders (default: `pluginsDir`) */
+  configDir?: string;
+  /** `plugin`: the capture plugin can be installed (default `none`) */
+  capture?: 'plugin' | 'none';
+  /**
+   * Runs once after the server file was copied into the instance directory, and again when the server file changed:
+   * installers (Forge, NeoForge) write their libraries here. Returns nothing; throw (or `fail`) on error.
+   */
+  prepare?(ctx: PrepareCtx): Promise<void>;
+  /** Arguments after the JVM flags; default `-jar server.jar` plus `--nogui` when `nogui` is set */
+  launch?(ctx: PrepareCtx): string[];
   /** Console command that re-reads the proxy's config (after a share tunnel changed its addresses) */
   reloadCommand?: string;
   /** The project's own artifacts (build.artifacts) and the capture plugin are copied into it */

@@ -9,7 +9,7 @@ import { CONFIG_DIR, ROOT, deepMerge, fail } from './util.ts';
  * proxy, limbo = the standalone Limbo server. Plugins target a family (`platforms = ["paper"]`), templates live in
  * `plugins/<key>/<family>/`. A family is not an instance type (see platforms/).
  */
-export type Platform = 'paper' | 'velocity' | 'limbo';
+export type Platform = 'paper' | 'velocity' | 'limbo' | 'bungee' | 'viaproxy' | 'fabric' | 'forge' | 'neoforge' | 'sponge';
 
 export interface JavaConfig {
   enhanced_redefinition: boolean;
@@ -49,6 +49,8 @@ export interface InstanceConfig {
 }
 
 export type ForwardingMode = 'auto' | 'modern' | 'legacy' | 'none';
+/** A mode a network actually runs with (`auto` resolved) */
+export type ResolvedForwarding = Exclude<ForwardingMode, 'auto'>;
 
 /** A set of proxies and the backends they route to; instances without a network are standalone. */
 export interface NetworkConfig {
