@@ -99,7 +99,7 @@ An instance has a `name` (also its folder under `.mcdevtools/run/`), a `type` ([
 
 - `network = "<name>"`: part of that network. A proxy needs one; a backend in a network is listed in its proxy's server list (`try = true` puts it in the `try` order); an instance without a network is **standalone** (Limbo, or any server you want to start but not route to).
 - `version`, `build`: `"auto"` (the default) or an exact value to pin: a Minecraft version / build number for `purpur`, `paper` and `folia`, a Velocity version / build id for `velocity`, a Limbo build for `limbo`.
-- `java`: the JDK to run on, a sdkman candidate id or an absolute path ([platforms](platforms.md#jdks)); `[java.defaults]` sets one per instance type.
+- `java`: the JDK to run on, a sdkman candidate id or an absolute path ([platforms](platforms.md)); `[java.defaults]` sets one per instance type.
 - `public_port`: the port clients use when it differs from `port` (a remapped container port).
 - `world_preset` (backends): `redstone_ready` (flat: bedrock, 3 stone, 116 sandstone), `void` or `default`.
 - Any other key is kept for extensions (`instance.config.extra`), for example a project-specific `context`.
