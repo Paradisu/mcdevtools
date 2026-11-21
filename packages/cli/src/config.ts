@@ -103,7 +103,8 @@ export interface DbConfig {
 
 export interface PluginConfig {
   key: string;
-  source: 'modrinth' | 'url' | 'jenkins' | 'github' | 'local';
+  /** modrinth | url | jenkins | github | local, or a source registered by an extension */
+  source: string;
   platforms: Platform[];
   slug?: string;
   version?: string;

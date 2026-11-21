@@ -4,7 +4,8 @@ import { parse, stringify } from 'smol-toml';
 import { parseArgs } from 'node:util';
 import type { Command, Ctx } from './command.ts';
 import { type DevConfig, type PluginConfig, type Platform, loadConfig } from './config.ts';
-import { appliedChangelogs, dbReachable, dumpDatabase, restoreDump } from './db.ts';
+import { dbReachable, dumpDatabase, restoreDump } from './db.ts';
+import { changelogId, migrationsOf } from './db-migrations.ts';
 import { readResolved, setup } from './downloads.ts';
 import { bold, formatBytes, keyValue, next, relPath, status as statusWord, table } from './output.ts';
 import { isRunning } from './supervisor.ts';
@@ -203,7 +204,7 @@ export async function exportProfile(config: DevConfig, options: ExportOptions): 
       dumpDatabase(join(stage, 'db', `${database}.dump`), database);
       databases.push(database);
     }
-    manifest.db = { changelogs: appliedChangelogs().map((file) => basename(file, '.xml')), databases };
+    manifest.db = { changelogs: config.db?.migrations ? migrationsOf(config).applied(config).map(changelogId) : [], databases };
   }
 
   if (include.has('worlds')) {
@@ -296,9 +297,7 @@ export async function inspectProfile(file: string): Promise<Manifest> {
 
 /** Changelog numbers in this checkout, read from migrations.xml (no Gradle build needed). */
 function localChangelogs(config: DevConfig): string[] {
-  const migrations = config.db?.migrations ?? fail('This project has no [db.migrations] to compare changelogs with');
-  const master = readFileSync(join(ROOT, migrations.search_path, migrations.changelog), 'utf8');
-  return [...master.matchAll(/file="[^"]*?([\w-]+)\.xml"/g)].map((match) => match[1]!);
+  return migrationsOf(config).ids(config);
 }
 
 function hostOf(url: string): string {

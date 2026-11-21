@@ -5,6 +5,14 @@ import { pinggyFactory } from './pinggy.ts';
 
 const FACTORIES: ProviderFactory[] = [pinggyFactory];
 
+/** Adds a tunnel provider (extensions call this through `api.registerShareProvider`). */
+export function registerProviderFactory(factory: ProviderFactory): void {
+  if (FACTORIES.some((candidate) => candidate.name === factory.name)) {
+    fail(`Share provider "${factory.name}" is registered twice`);
+  }
+  FACTORIES.push(factory);
+}
+
 export function providers(): ProviderFactory[] {
   return FACTORIES;
 }

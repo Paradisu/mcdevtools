@@ -164,24 +164,37 @@ async function resolveGithub(plugin: PluginConfig, platform: Platform): Promise<
   };
 }
 
-/** Resolves one plugin for one platform. `local` plugins are handled by the caller. */
-export async function resolvePlugin(
-  plugin: PluginConfig,
-  platform: Platform,
-  minecraft: string,
-): Promise<ResolvedPlugin> {
-  if (plugin.source === 'modrinth') {
-    return resolveModrinth(plugin, platform, minecraft);
-  }
-  if (plugin.source === 'jenkins') {
-    return resolveJenkins(plugin, platform);
-  }
-  if (plugin.source === 'github') {
-    return resolveGithub(plugin, platform);
-  }
+async function resolveUrl(plugin: PluginConfig, platform: Platform): Promise<ResolvedPlugin> {
   const url = plugin.urls?.[platform] ?? plugin.url;
   if (!url) {
     fail(`Plugin "${plugin.key}" has no url for ${platform}`);
   }
   return { key: plugin.key, platform, name: `${plugin.key}.jar`, url, version: 'url' };
+}
+
+/** Finds one plugin's artifact for one platform; `source = "<name>"` in the config selects it. */
+export type PluginSourceResolver = (plugin: PluginConfig, platform: Platform, minecraft: string) => Promise<ResolvedPlugin>;
+
+const SOURCES = new Map<string, PluginSourceResolver>([
+  ['modrinth', resolveModrinth],
+  ['jenkins', resolveJenkins],
+  ['github', resolveGithub],
+  ['url', resolveUrl],
+]);
+
+/** Adds a plugin source (extensions call this through `api.registerPluginSource`). `local` is built in. */
+export function registerPluginSource(name: string, resolver: PluginSourceResolver): void {
+  if (SOURCES.has(name) || name === 'local') {
+    fail(`Plugin source "${name}" is registered twice`);
+  }
+  SOURCES.set(name, resolver);
+}
+
+/** Resolves one plugin for one platform. `local` plugins are handled by the caller. */
+export async function resolvePlugin(plugin: PluginConfig, platform: Platform, minecraft: string): Promise<ResolvedPlugin> {
+  const resolver = SOURCES.get(plugin.source);
+  if (!resolver) {
+    fail(`Plugin "${plugin.key}": unknown source "${plugin.source}". Known: ${[...SOURCES.keys(), 'local'].join(', ')}`);
+  }
+  return resolver(plugin, platform, minecraft);
 }

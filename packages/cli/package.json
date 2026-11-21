@@ -13,6 +13,7 @@
     "./output": "./src/output.ts",
     "./prompt": "./src/prompt.ts",
     "./db": "./src/db.ts",
+    "./util": "./src/util.ts",
     "./tsconfig.base.json": "../../tsconfig.base.json"
   },
   "scripts": {

@@ -13,6 +13,14 @@ export const EXPORTERS: Record<string, Exporter> = {
   [replaymod.name]: replaymod,
 };
 
+/** Adds an export format (extensions call this through `api.registerExporter`). */
+export function registerExporter(format: Exporter): void {
+  if (EXPORTERS[format.name]) {
+    fail(`Export format "${format.name}" is registered twice`);
+  }
+  EXPORTERS[format.name] = format;
+}
+
 export function exporter(name: string): Exporter {
   return EXPORTERS[name] ?? fail(`Unknown export format "${name}". Available: ${Object.keys(EXPORTERS).join(', ')}`);
 }

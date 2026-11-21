@@ -2,13 +2,13 @@ import { dim, relPath, step, streamRow } from './output.ts';
 import { existsSync } from 'node:fs';
 import { mkdir, readdir } from 'node:fs/promises';
 import { basename, join } from 'node:path';
-import { env } from './config.ts';
+import { type DevConfig, env } from './config.ts';
+import { changelogId, migrationsOf } from './db-migrations.ts';
+import { emit } from './extension/hooks.ts';
 import { confirmAction } from './prompt.ts';
-import { CONFIG_DIR, ROOT, capture, fail, log, run } from './util.ts';
+import { CONFIG_DIR, capture, fail, log, run } from './util.ts';
 
-const SEEDS = join(CONFIG_DIR, 'db', 'seed');
-const SNAPSHOTS = join(CONFIG_DIR, 'db', 'snapshots');
-const DEVTOOLS = join(ROOT, 'devtools', 'migrate', 'build', 'install', 'migrate', 'bin', 'migrate');
+export const SNAPSHOTS = join(CONFIG_DIR, 'db', 'snapshots');
 
 export function pgEnv(database?: string): Record<string, string> {
   const { db } = env();
@@ -19,11 +19,11 @@ export function pgEnv(database?: string): Record<string, string> {
     PGPASSWORD: db.password,
     PGDATABASE: database ?? db.name,
     PGOPTIONS: '-c client_min_messages=warning',
-    PARADISU_DB_HOST: db.host,
-    PARADISU_DB_PORT: db.port,
-    PARADISU_DB_NAME: db.name,
-    PARADISU_DB_USER: db.user,
-    PARADISU_DB_PASSWORD: db.password,
+    MCDEV_DB_HOST: db.host,
+    MCDEV_DB_PORT: db.port,
+    MCDEV_DB_NAME: db.name,
+    MCDEV_DB_USER: db.user,
+    MCDEV_DB_PASSWORD: db.password,
   };
 }
 
@@ -31,7 +31,7 @@ export function dbReachable(): boolean {
   return capture('pg_isready', [], { env: pgEnv() }).status === 0;
 }
 
-/** Runs psql with inherited stdio; extra args are passed straight through (`dev db psql -c '...'`). */
+/** Runs psql with inherited stdio; extra args are passed straight through (`mcdev db psql -c '...'`). */
 export function psql(args: string[], database?: string): void {
   run('psql', args, { env: pgEnv(database) });
 }
@@ -74,115 +74,89 @@ export function runSql(sql: string, vars: Record<string, string> = {}): void {
   }
 }
 
-/** Whether Liquibase has ever run against the dev database. */
-export function isInitialised(): boolean {
-  return query(`select to_regclass('public.databasechangelog') is not null`) === 't';
-}
-
-export function appliedChangelogs(): string[] {
-  if (!isInitialised()) {
-    return [];
-  }
-  return query(`select distinct filename from databasechangelog order by 1`).split('\n').filter(Boolean);
-}
-
-function devtools(args: string[]): string {
-  const result = capture(DEVTOOLS, args, { env: pgEnv() });
-  if (result.status !== 0) {
-    fail(`devtools ${args.join(' ')} failed:\n${result.stderr || result.stdout}`);
-  }
-  return result.stdout;
-}
-
-/** Changelog files in migrations.xml order; builds the devtools runner first. */
-export async function changelogFiles(): Promise<string[]> {
-  buildDevtools();
-  return devtools(['files']).split('\n').filter(Boolean);
-}
-
-function buildDevtools(): void {
-  log(dim('Building migration tool'));
-  run('./gradlew', ['-q', ':devtools:migrate:installDist']);
-}
-
-function changelogNumber(file: string): string {
-  return basename(file, '.xml');
-}
-
 export interface ResetOptions {
+  config: DevConfig;
   through?: string;
   yes: boolean;
   all: boolean;
-  /** Skip loading dev/db/fixtures */
+  /** Skip the `afterDbReset` hooks (extensions load fixtures there) */
   noFixtures?: boolean;
   stopAll: () => Promise<void>;
 }
 
 /**
  * Rebuilds the dev database: drops the schema, applies changelogs up to `through` (default: all) with
- * the matching seed data, then checks that only the changelogs that were not applied remain.
+ * the matching seed data (`<seed_dir>/<changelog id>.sql`, then `local.sql`), runs the `afterDbReset` hooks, then
+ * checks that only the changelogs that were not applied remain.
  */
 export async function reset(options: ResetOptions): Promise<void> {
+  const { config } = options;
+  const migrations = config.db?.migrations ?? fail('db reset needs [db.migrations] in .mcdevtools/config.toml');
+  const provider = migrationsOf(config);
+  const seeds = join(CONFIG_DIR, migrations.seed_dir);
+  const others = (config.db?.databases ?? []).slice(1);
   const target = options.through ? `changelog ${options.through}` : 'the latest changelog';
-  if (!(await confirmAction(`This DROPS the dev database${options.all ? 's (including LuckPerms)' : ''} and reseeds it through ${target}. Continue?`, options.yes))) {
+  if (!(await confirmAction(`This DROPS the dev database${options.all && others.length > 0 ? `s (including ${others.join(', ')})` : ''} and reseeds it through ${target}. Continue?`, options.yes))) {
     log('Aborted.');
     return;
   }
   await options.stopAll();
+  await emit('beforeDbReset', config);
 
-  const files = await changelogFiles();
-  if (options.through && !files.some((file) => changelogNumber(file) === options.through)) {
-    fail(`Unknown changelog ${options.through}. Available: ${files.map(changelogNumber).join(", ")}`);
+  const files = await provider.files(config);
+  if (options.through && !files.some((file) => changelogId(file) === options.through)) {
+    fail(`Unknown changelog ${options.through}. Available: ${files.map(changelogId).join(', ')}`);
   }
-  const applying = files.filter((file) => !options.through || changelogNumber(file) <= options.through);
+  const applying = files.filter((file) => !options.through || changelogId(file) <= options.through);
 
-  const reset = `drop schema public cascade; create schema public;`;
-  run('psql', ['-X', '-q', '-v', 'ON_ERROR_STOP=1', '-c', reset], { env: pgEnv() });
+  const drop = `drop schema public cascade; create schema public;`;
+  run('psql', ['-X', '-q', '-v', 'ON_ERROR_STOP=1', '-c', drop], { env: pgEnv() });
   if (options.all) {
-    run('psql', ['-X', '-q', '-v', 'ON_ERROR_STOP=1', '-c', reset], { env: pgEnv('luckperms') });
+    for (const database of others) {
+      run('psql', ['-X', '-q', '-v', 'ON_ERROR_STOP=1', '-c', drop], { env: pgEnv(database) });
+    }
   }
 
   step('Applying changelogs');
   const row = streamRow([{ min: 5 }, {}]);
   for (const file of applying) {
-    const number = changelogNumber(file);
-    devtools(['update-file', file]);
-    const seed = join(SEEDS, `${number}.sql`);
+    const id = changelogId(file);
+    await provider.applyFile(config, file);
+    const seed = join(seeds, `${id}.sql`);
     const seeded = existsSync(seed);
     if (seeded) {
       run('psql', ['-X', '-v', 'ON_ERROR_STOP=1', '-q', '-f', seed], { env: pgEnv() });
     }
-    log(`  ${row([number, seeded ? 'applied, seeded' : 'applied'])}`);
+    log(`  ${row([id, seeded ? 'applied, seeded' : 'applied'])}`);
   }
-  const local = join(SEEDS, 'local.sql');
+  const local = join(seeds, 'local.sql');
   if (existsSync(local)) {
     run('psql', ['-X', '-v', 'ON_ERROR_STOP=1', '-q', '-f', local], { env: pgEnv() });
     log(`  ${row(['local', 'seeded'])}`);
   }
 
   if (!options.noFixtures) {
-    const { loadFixtures } = await import('./mc/fixtures.ts');
-    await loadFixtures({ through: options.through, replace: false });
+    await emit('afterDbReset', config, options.through);
   }
 
   const remaining = new Set(files.filter((file) => !applying.includes(file)));
-  const unrun = devtools(['unrun']).split('\n').filter(Boolean);
+  const unrun = await provider.pending(config);
   const unexpected = unrun.filter((line) => !remaining.has(line.slice(line.indexOf(':') + 1)));
   if (unexpected.length > 0) {
     fail(
-      `After migrating, Liquibase still wants to run changesets that are not in a later changelog:\n  ${unexpected.join('\n  ')}\n` +
-        'Their recorded file path differs from the one in migrations.xml, so the proxy would re-run them.',
+      `After migrating, the migration tool still wants to run changesets that are not in a later changelog:\n  ${unexpected.join('\n  ')}\n` +
+        `Their recorded file path differs from the one in ${migrations.changelog}, so the proxy would re-run them.`,
     );
   }
-  const last = changelogNumber(applying[applying.length - 1]!);
-  log(`Database at changelog ${last}${remaining.size > 0 ? `; ${[...remaining].map(changelogNumber).join(', ')} apply on the next proxy start` : ''}.`);
+  const last = changelogId(applying[applying.length - 1]!);
+  log(`Database at changelog ${last}${remaining.size > 0 ? `; ${[...remaining].map(changelogId).join(', ')} apply on the next proxy start` : ''}.`);
 }
 
 /** Recreates the database at its current changelog position with fresh seed data. */
-export async function reseed(yes: boolean, stopAll: () => Promise<void>): Promise<void> {
-  const applied = appliedChangelogs();
-  const through = applied.length > 0 ? changelogNumber(applied[applied.length - 1]!) : undefined;
-  await reset({ through, yes, all: false, stopAll });
+export async function reseed(config: DevConfig, yes: boolean, stopAll: () => Promise<void>): Promise<void> {
+  const applied = migrationsOf(config).applied(config);
+  const through = applied.length > 0 ? changelogId(applied[applied.length - 1]!) : undefined;
+  await reset({ config, through, yes, all: false, stopAll });
 }
 
 export async function snapshot(name: string): Promise<void> {

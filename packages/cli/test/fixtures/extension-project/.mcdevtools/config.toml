@@ -1,0 +1,4 @@
+extensions = ["extensions/demo", "missing-extension"]
+
+[demo]
+greeting = "hi"

@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import type { Command, Ctx } from './command.ts';
 import { type DevConfig, loadConfig } from './config.ts';
 import * as db from './db.ts';
+import { dbCommands } from './db-commands.ts';
 import { setup } from './downloads.ts';
 import * as instances from './instances.ts';
 import { supervise } from './supervisor.ts';
@@ -12,12 +13,15 @@ import { COMMANDS as ZELLIJ_COMMANDS, offerUi } from './zellij.ts';
 import { COMMANDS as PROFILE_COMMANDS } from './profile.ts';
 import { SHARE_COMMANDS, stopShare } from './share/commands.ts';
 import { CAPTURE_COMMANDS } from './capture/commands.ts';
-import { configDataVersion, fixtureCommand, mcCommands } from './mc/commands.ts';
+import { configDataVersion, mcCommands } from './mc/commands.ts';
 import { askOptional, askText, disableInput, interactive, isPromptExit, pickFrom, pickInstance, pickInstances } from './prompt.ts';
 import type { Instance } from './templates.ts';
 import { platformOf } from './platforms/index.ts';
 import { validateTopology } from './topology.ts';
+import { migrationsOf, registerMigrationProvider } from './db-migrations.ts';
+import { LIQUIBASE } from './liquibase.ts';
 import { migrateConfigCommand } from './legacy-config.ts';
+import { loadExtensions } from './extension/load.ts';
 import { dim, step } from './output.ts';
 import { commandHelp, groupOf, menuChoices, usage as helpUsage } from './help.ts';
 import { CONFIG_DIR, DevError, ROOT, capture, fail, log, warn } from './util.ts';
@@ -44,24 +48,6 @@ async function namesOrPick(ctx: Ctx, names: string[], message: string, isChecked
 
 async function instanceArg(ctx: Ctx, args: string[], message: string, filter?: (i: Instance) => boolean) {
   return args[0] ?? (await pickInstance(ctx.config, message, filter));
-}
-
-function snapshotNames(): string[] {
-  const dir = join(CONFIG_DIR, 'db', 'snapshots');
-  return existsSync(dir)
-    ? readdirSync(dir)
-        .filter((file) => file.endsWith('.dump'))
-        .map((file) => file.slice(0, -'.dump'.length))
-    : [];
-}
-
-async function changelogChoice(): Promise<string | undefined> {
-  const files = await db.changelogFiles();
-  const numbers = files.map((file) => file.replace(/^.*\/(\w+)\.xml$/, '$1'));
-  return pickFrom(
-    'Reset through which changelog?',
-    numbers.map((n, i) => ({ name: i === numbers.length - 1 ? `${n} ${dim('latest')}` : n, value: i === numbers.length - 1 ? undefined : n })),
-  );
 }
 
 const COMMANDS: Command[] = [
@@ -220,81 +206,6 @@ const COMMANDS: Command[] = [
       return instances.clean(values.all ?? false);
     },
   },
-  {
-    name: 'db reset',
-    usage: '',
-    summary: 'Rebuild the database with seed data and fixtures',
-    options: [
-      { flag: '--through <00N>', summary: 'Stop at this changelog (default: latest)' },
-      { flag: '--all', summary: 'Also reset the LuckPerms database' },
-      { flag: '--no-fixtures', summary: 'Skip dev/db/fixtures' },
-      { flag: '--yes', summary: 'Do not ask for confirmation' },
-    ],
-    run: async (ctx, args) => {
-      const { values } = parseArgs({
-        args,
-        options: {
-          through: { type: 'string' },
-          all: { type: 'boolean' },
-          yes: { type: 'boolean' },
-          'no-fixtures': { type: 'boolean' },
-        },
-      });
-      let through = values.through;
-      let all = values.all ?? false;
-      if (args.length === 0 && interactive()) {
-        through = await changelogChoice();
-        all = await askOptional('Also reset the LuckPerms database?', false);
-      }
-      return db.reset({ through, all, yes: values.yes ?? false, noFixtures: values['no-fixtures'] ?? false, stopAll: ctx.stopAll });
-    },
-  },
-  {
-    name: 'db seed',
-    usage: '',
-    summary: 'Reseed at the current changelog',
-    options: [
-      { flag: '--yes', summary: 'Do not ask for confirmation' },
-    ],
-    run: (ctx, args) => {
-      const { values } = parseArgs({ args, options: { yes: { type: 'boolean' } } });
-      return db.reseed(values.yes ?? false, ctx.stopAll);
-    },
-  },
-  {
-    name: 'db snapshot',
-    usage: '<name>',
-    summary: 'Save the database to dev/db/snapshots',
-    run: async (_ctx, args) =>
-      db.snapshot(args[0] ?? (await askText('Snapshot name', { default: `snap-${timestamp()}` }, 'A snapshot name'))),
-  },
-  {
-    name: 'db restore',
-    usage: '<name>',
-    summary: 'Restore a snapshot',
-    options: [
-      { flag: '--yes', summary: 'Do not ask for confirmation' },
-    ],
-    run: async (ctx, args) => {
-      const { values, positionals } = parseArgs({ args, options: { yes: { type: 'boolean' } }, allowPositionals: true });
-      const name =
-        positionals[0] ??
-        (await pickFrom(
-          'Restore which snapshot?',
-          snapshotNames().map((n) => ({ name: n, value: n })),
-          'A snapshot name',
-        ));
-      return db.restore(name, values.yes ?? false, ctx.stopAll);
-    },
-  },
-  {
-    name: 'db psql',
-    usage: '[psql args...]',
-    summary: 'Open psql',
-    details: 'Extra arguments are passed to psql.',
-    passthrough: true,
-    run: (_ctx, args) => db.psql(args),
-  },
 ];
 
 COMMANDS.push(...ZELLIJ_COMMANDS, ...SHARE_COMMANDS, ...CAPTURE_COMMANDS, ...PROFILE_COMMANDS);
@@ -302,7 +213,7 @@ COMMANDS.push(...ZELLIJ_COMMANDS, ...SHARE_COMMANDS, ...CAPTURE_COMMANDS, ...PRO
 /** Commands that need the loaded config are registered lazily in main(). */
 function registerConfigCommands(config: DevConfig): void {
   COMMANDS.push(
-    fixtureCommand(),
+    ...dbCommands(config),
     ...mcCommands(
       () => configDataVersion(config),
       () => config.instances.filter((i) => i.enabled && platformOf(i.type).worlds).map((i) => i.name),
@@ -346,6 +257,9 @@ async function main(argv: string[]): Promise<void> {
     return;
   }
   const config = await loadConfig();
+  // Extensions register commands and platforms, so they load before anything is validated or looked up
+  registerMigrationProvider('liquibase', LIQUIBASE);
+  await loadExtensions(config, (command) => COMMANDS.push(command));
   validateTopology(config);
   registerConfigCommands(config);
   if (argv[0] === 'help' || argv[0] === '--help' || argv[0] === '-h') {
@@ -419,8 +333,8 @@ async function bootstrap(config: DevConfig): Promise<void> {
         if (!db.dbReachable()) {
           throw new DevError('PostgreSQL is not reachable');
         }
-        if (!db.isInitialised()) {
-          await db.reset({ yes: true, all: false, stopAll: async () => {} });
+        if (config.db.migrations && !migrationsOf(config).initialised(config)) {
+          await db.reset({ config, yes: true, all: false, stopAll: async () => {} });
         }
       },
     ],

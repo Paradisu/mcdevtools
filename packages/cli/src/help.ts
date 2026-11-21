@@ -6,6 +6,7 @@ interface Section {
   prefixes: string[];
 }
 
+/** Built-in sections; extensions add more with `api.registerHelpSection` */
 const SECTIONS: Section[] = [
   { title: 'Network', prefixes: ['bootstrap', 'setup', 'build', 'start', 'stop', 'restart', 'status', 'console', 'logs', 'reset-world', 'clean'] },
   { title: 'Consoles', prefixes: ['ui', 'web'] },
@@ -17,6 +18,16 @@ const SECTIONS: Section[] = [
 ];
 
 const OTHER = 'Other';
+
+/** Adds the commands whose first word is in `prefixes` to a section (created after the existing ones when new). */
+export function registerHelpSection(title: string, prefixes: string[]): void {
+  const existing = SECTIONS.find((section) => section.title === title);
+  if (existing) {
+    existing.prefixes.push(...prefixes);
+  } else {
+    SECTIONS.push({ title, prefixes: [...prefixes] });
+  }
+}
 
 /** First word of a command name: its group when the name has two words. */
 export function groupOf(command: Command): string | undefined {
