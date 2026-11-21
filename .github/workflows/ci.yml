@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - '**'
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+      - 'LICENSE'
+  pull_request:
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+      - 'LICENSE'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Typecheck, test and build
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout Repository
+      # See https://github.com/actions/checkout/releases
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+    - name: Build Development Image
+      # The checks run inside the image this repository publishes, so Node 24 and JetBrains Runtime 25 are guaranteed
+      run: docker build -f devcontainer/Dockerfile -t mcdevtools-devcontainer:ci .
+    - name: Typecheck, Test and Build
+      run: |
+        docker run --rm --user root -e HOME=/root -e CI=true -v "$PWD:/work" -w /work mcdevtools-devcontainer:ci bash -lc '
+          set -e
+          git config --global --add safe.directory /work
+          pnpm install --frozen-lockfile
+          pnpm typecheck
+          pnpm test
+          cd java
+          ./gradlew spotlessCheck build installDist
+        '
