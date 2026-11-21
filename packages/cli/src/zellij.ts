@@ -7,13 +7,13 @@ import type { Command } from './command.ts';
 import type { DevConfig } from './config.ts';
 import { askOptional, interactive, pickFrom } from './prompt.ts';
 import { type Instance, instancesOf } from './templates.ts';
-import { DEV, ROOT, RUN, capture, fail, log, render, run, warn } from './util.ts';
+import { CONFIG_DIR, ROOT, RUN, TOOL_ROOT, capture, fail, log, render, run, warn } from './util.ts';
 
 const DIR = join(RUN, '.zellij');
 const LAYOUT_DIR = join(DIR, 'layouts');
 const TLS_DIR = join(DIR, 'tls');
 const CONFIG_FILE = join(DIR, 'config.kdl');
-const DEV_BIN = join(DEV, 'dev');
+const DEV_BIN = join(TOOL_ROOT, 'bin', 'mcdev');
 
 function requireZellij(): void {
   if (capture('zellij', ['--version']).status !== 0) {
@@ -39,7 +39,7 @@ function webTls(config: DevConfig): string {
 
 function writeConfig(config: DevConfig): void {
   mkdirSync(LAYOUT_DIR, { recursive: true });
-  const template = readFileSync(join(DEV, 'zellij', 'config.kdl'), 'utf8');
+  const template = readFileSync(join(TOOL_ROOT, 'packages', 'cli', 'zellij', 'config.kdl'), 'utf8');
   writeFileSync(
     CONFIG_FILE,
     render(template, {
@@ -123,7 +123,7 @@ function writeLayouts(config: DevConfig): string[] {
   writeFileSync(join(LAYOUT_DIR, 'network.kdl'), networkLayout(running));
   writeFileSync(join(LAYOUT_DIR, 'tabs.kdl'), tabsLayout(running));
   // User layouts: committed examples first, local ones override them
-  for (const source of [join(DEV, 'layouts'), join(DEV, 'layouts.local')]) {
+  for (const source of [join(TOOL_ROOT, 'packages', 'cli', 'layouts'), join(CONFIG_DIR, 'layouts'), join(CONFIG_DIR, 'layouts.local')]) {
     if (existsSync(source)) {
       cpSync(source, LAYOUT_DIR, { recursive: true });
     }
@@ -170,7 +170,7 @@ export async function ui(config: DevConfig, layout: string | undefined, options:
   }
   if (options.background) {
     if (layout !== config.ui.default_layout) {
-      fail('--background only supports the default layout (ui.default_layout in dev.toml)');
+      fail('--background only supports the default layout (ui.default_layout in config.toml)');
     }
     if (!sessionExists(config, name)) {
       const result = zellij(config, ['attach', '--create-background', name]);
@@ -221,7 +221,7 @@ function ensureCertificate(config: DevConfig): void {
   names.push(`${isIP(config.public_host) ? 'IP' : 'DNS'}:${config.public_host}`);
   run('openssl', [
     'req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '825',
-    '-subj', '/CN=paradisu-dev',
+    '-subj', '/CN=mcdevtools',
     '-addext', `subjectAltName=${[...new Set(names)].join(',')}`,
     '-keyout', join(TLS_DIR, 'key.pem'),
     '-out', join(TLS_DIR, 'cert.pem'),

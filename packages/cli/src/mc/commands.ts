@@ -5,7 +5,7 @@ import { dirname, join, resolve } from 'node:path';
 import type { Command } from '../command.ts';
 import { queryJson } from '../db.ts';
 import { askText, interactive, pickFrom, pickMany } from '../prompt.ts';
-import { DEV, DevError, ROOT, RUN, fail, log, warn } from '../util.ts';
+import { CONFIG_DIR, DevError, ROOT, RUN, fail, log, warn } from '../util.ts';
 import { dataVersion } from './dataversion.ts';
 import { FIXTURE_DIRS, fixtureFiles, loadFixtures, readFixture } from './fixtures.ts';
 import {
@@ -447,7 +447,7 @@ async function fixturesCommand(args: string[]): Promise<void> {
   if (action !== 'load') fail(`Unknown fixtures action "${action}" (load | list)`);
   let only = positionals.slice(1);
   if (only.length === 0 && interactive()) {
-    only = await pickMany('Load which fixtures?', fixtureFiles().map((f) => ({ name: f.replace(`${DEV}/`, 'dev/'), value: f, checked: true })));
+    only = await pickMany('Load which fixtures?', fixtureFiles().map((f) => ({ name: f.replace(`${CONFIG_DIR}/`, '.mcdevtools/'), value: f, checked: true })));
   }
   const loaded = await loadFixtures({ only, replace: values.replace ?? false });
   if (loaded === 0) log('Nothing loaded.');

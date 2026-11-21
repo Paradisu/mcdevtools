@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parse } from 'smol-toml';
-import { DEV, deepMerge, fail } from './util.ts';
+import { CONFIG_DIR, deepMerge, fail } from './util.ts';
 
 /** paper = the Bukkit-family backends (Purpur), velocity = the proxy, limbo = the standalone Limbo server */
 export type Platform = 'paper' | 'velocity' | 'limbo';
@@ -168,10 +168,10 @@ export function env(): Env {
   };
 }
 
-/** Loads dev/dev.toml and deep-merges dev/dev.local.toml (gitignored) on top. */
+/** Loads .mcdevtools/config.toml and deep-merges .mcdevtools/config.local.toml (gitignored) on top. */
 export async function loadConfig(): Promise<DevConfig> {
-  const basePath = join(DEV, 'dev.toml');
-  const localPath = join(DEV, 'dev.local.toml');
+  const basePath = join(CONFIG_DIR, 'config.toml');
+  const localPath = join(CONFIG_DIR, 'config.local.toml');
   let merged = parse(await readFile(basePath, 'utf8')) as Record<string, unknown>;
   if (existsSync(localPath)) {
     const local = parse(await readFile(localPath, 'utf8')) as Record<string, unknown>;

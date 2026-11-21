@@ -10,7 +10,7 @@ import { bold, formatBytes, keyValue, next, relPath, status as statusWord, table
 import { isRunning } from './supervisor.ts';
 import { askText, confirmAction, interactive, pickFrom, pickMany, searchFrom } from './prompt.ts';
 import { instancesOf } from './templates.ts';
-import { CACHE, DEV, DevError, ROOT, RUN, TEMPLATES_LOCAL, capture, fail, log, warn } from './util.ts';
+import { CACHE, CONFIG_DIR, DevError, ROOT, RUN, TEMPLATES_LOCAL, capture, fail, log, warn } from './util.ts';
 
 /**
  * Profiles: one .tar.gz that carries a whole dev setup to another machine.
@@ -27,11 +27,11 @@ import { CACHE, DEV, DevError, ROOT, RUN, TEMPLATES_LOCAL, capture, fail, log, w
  */
 
 const FORMAT = 1;
-const PROFILES = join(DEV, 'profiles');
+const PROFILES = join(CONFIG_DIR, 'profiles');
 const SECTIONS = ['plugins', 'servers', 'overrides', 'db', 'worlds'] as const;
 type Section = (typeof SECTIONS)[number];
-const JAR_DIR = join('dev', '.cache', 'profile-jars');
-const LOCAL_TOML = join(DEV, 'dev.local.toml');
+const JAR_DIR = join('.mcdevtools', '.cache', 'profile-jars');
+const LOCAL_TOML = join(CONFIG_DIR, 'config.local.toml');
 const ALLOWED_TOP = ['profile.toml', 'config', 'plugins', 'db', 'worlds'];
 const WORLD_DIRS = (name: string) => name === 'world' || name.startsWith('world_');
 
@@ -378,7 +378,7 @@ export async function importProfile(ctx: Ctx, file: string, options: ImportOptio
     await ctx.stopAll();
 
     // Back up what is about to be replaced
-    const backup = join(DEV, '.profile-backup', stamp());
+    const backup = join(CONFIG_DIR, '.profile-backup', stamp());
     mkdirSync(backup, { recursive: true });
     if (existsSync(LOCAL_TOML)) cpSync(LOCAL_TOML, join(backup, 'dev.local.toml'));
     if (existsSync(TEMPLATES_LOCAL)) cpSync(TEMPLATES_LOCAL, join(backup, 'templates.local'), { recursive: true });

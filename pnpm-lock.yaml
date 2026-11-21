@@ -164,7 +164,9 @@ settings:
 
 importers:
 
-  .:
+  .: {}
+
+  packages/cli:
     dependencies:
       '@inquirer/prompts':
         specifier: 8.7.3

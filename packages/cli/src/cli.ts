@@ -17,7 +17,7 @@ import { askOptional, askText, disableInput, interactive, isPromptExit, pickFrom
 import type { Instance } from './templates.ts';
 import { dim, step } from './output.ts';
 import { commandHelp, groupOf, menuChoices, usage as helpUsage } from './help.ts';
-import { DEV, DevError, ROOT, capture, fail, log, warn } from './util.ts';
+import { CONFIG_DIR, DevError, ROOT, capture, fail, log, warn } from './util.ts';
 
 const noBuildFlag = { 'no-build': { type: 'boolean' } } as const;
 
@@ -44,7 +44,7 @@ async function instanceArg(ctx: Ctx, args: string[], message: string, filter?: (
 }
 
 function snapshotNames(): string[] {
-  const dir = join(DEV, 'db', 'snapshots');
+  const dir = join(CONFIG_DIR, 'db', 'snapshots');
   return existsSync(dir)
     ? readdirSync(dir)
         .filter((file) => file.endsWith('.dump'))

@@ -5,7 +5,7 @@ import { basename, join, resolve } from 'node:path';
 import { parse as parseToml } from 'smol-toml';
 import { loadConfig } from '../config.ts';
 import { queryJson, runSql } from '../db.ts';
-import { DEV, DevError, ROOT, fail, log, warn } from '../util.ts';
+import { CONFIG_DIR, DevError, ROOT, fail, log, warn } from '../util.ts';
 import { dataVersion } from './dataversion.ts';
 import {
   ARMOR_ORDER,
@@ -21,7 +21,7 @@ import type { Tag } from './nbt.ts';
 import { parse as parseSnbt } from './snbt.ts';
 import { offlineUuid, parseUuid, looksLikeUuid } from './uuid.ts';
 
-export const FIXTURE_DIRS = [join(DEV, 'db', 'fixtures'), join(DEV, 'db', 'fixtures.local')];
+export const FIXTURE_DIRS = [join(CONFIG_DIR, 'db', 'fixtures'), join(CONFIG_DIR, 'db', 'fixtures.local')];
 
 interface InventoryEntry {
   player: string;

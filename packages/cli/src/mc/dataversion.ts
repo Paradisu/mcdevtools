@@ -28,5 +28,5 @@ export async function dataVersion(config: DevConfig & { data_version?: number })
     ? // resolved.json records absolute paths; the checkout may have moved since (devcontainer vs host)
       (dataVersionOfJar(resolved.purpur.file) ?? dataVersionOfJar(join(CACHE, 'servers', basename(resolved.purpur.file))))
     : undefined;
-  return found ?? fail('Cannot determine the Minecraft DataVersion: run `dev setup`, or set data_version in dev/dev.local.toml');
+  return found ?? fail('Cannot determine the Minecraft DataVersion: run `dev setup`, or set data_version in .mcdevtools/config.local.toml');
 }

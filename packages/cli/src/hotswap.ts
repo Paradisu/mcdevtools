@@ -43,7 +43,7 @@ export async function catalogGroups(): Promise<Set<string>> {
 
 /**
  * JVM flags that enable HotswapAgent with only the plugins this project can use. Limbo runs none of our code,
- * so it gets no agent. `extraPlugins` are kept in addition (`hotswap_plugins` in dev.toml).
+ * so it gets no agent. `extraPlugins` are kept in addition (`hotswap_plugins` in config.toml).
  */
 export function hotswapFlags(platform: Platform, groups: Iterable<string>, extraPlugins: string[]): string[] {
   if (platform === 'limbo') {

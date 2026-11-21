@@ -4,7 +4,7 @@ import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { type DevConfig, type Env, type Platform, type ServerConfig, env } from './config.ts';
 import { shareAddresses, shareProxyProtocol } from './share/state.ts';
-import { RUN, TEMPLATES, TEMPLATES_LOCAL, render } from './util.ts';
+import { CORE_TEMPLATES, RUN, TEMPLATES, TEMPLATES_LOCAL, render } from './util.ts';
 
 export interface Instance {
   /** `proxy` or the server name */
@@ -145,23 +145,15 @@ export async function applyTemplates(
 ): Promise<void> {
   const vars = await templateVars(config, instance);
   const base = { velocity: 'proxy', paper: 'paper-common', limbo: 'limbo' }[instance.platform];
-  await overlay(join(TEMPLATES, base), instance.dir, vars);
-  await overlay(join(TEMPLATES, 'servers', instance.name), instance.dir, vars);
-  for (const key of installedPlugins) {
-    const plugin = config.plugins.find((candidate) => candidate.key === key);
-    const folder = plugin?.config_dir?.[instance.platform] ?? key;
-    await overlay(
-      join(TEMPLATES, 'plugins', key, instance.platform),
-      join(instance.dir, 'plugins', folder),
-      vars,
-    );
-  }
-  // Personal overrides win over everything above (same layout as dev/templates); profiles carry them
-  await overlay(join(TEMPLATES_LOCAL, base), instance.dir, vars);
-  await overlay(join(TEMPLATES_LOCAL, 'servers', instance.name), instance.dir, vars);
-  for (const key of installedPlugins) {
-    const plugin = config.plugins.find((candidate) => candidate.key === key);
-    const folder = plugin?.config_dir?.[instance.platform] ?? key;
-    await overlay(join(TEMPLATES_LOCAL, 'plugins', key, instance.platform), join(instance.dir, 'plugins', folder), vars);
+  // Layers, later ones win: templates shipped with mcdevtools, the project's (.mcdevtools/templates), then
+  // personal overrides (.mcdevtools/templates.local, exported by profiles). Each has the same layout.
+  for (const layer of [CORE_TEMPLATES, TEMPLATES, TEMPLATES_LOCAL]) {
+    await overlay(join(layer, base), instance.dir, vars);
+    await overlay(join(layer, 'servers', instance.name), instance.dir, vars);
+    for (const key of installedPlugins) {
+      const plugin = config.plugins.find((candidate) => candidate.key === key);
+      const folder = plugin?.config_dir?.[instance.platform] ?? key;
+      await overlay(join(layer, 'plugins', key, instance.platform), join(instance.dir, 'plugins', folder), vars);
+    }
   }
 }

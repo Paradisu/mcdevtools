@@ -91,7 +91,7 @@ async function start(config: DevConfig, args: string[]): Promise<void> {
   if (limit !== undefined && targets.length > limit) {
     fail(
       `${provider.name} allows ${limit} tunnel${limit === 1 ? '' : 's'} at once on this account. Share fewer targets ` +
-        `(for example \`dev share start proxy\`) or configure an account token under [share.providers.${provider.name}] in dev.local.toml.`,
+        `(for example \`dev share start proxy\`) or configure an account token under [share.providers.${provider.name}] in config.local.toml.`,
     );
   }
   if (targets.includes('web') && !webRunning(config)) {

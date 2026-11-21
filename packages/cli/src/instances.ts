@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import type { DevConfig } from './config.ts';
 import { readResolved, type ResolvedFiles } from './downloads.ts';
 import { type Instance, applyTemplates, instancesOf } from './templates.ts';
-import { RUN, ROOT, capture, fail, log, portListening, portOpen, run, sleep, waitFor, warn } from './util.ts';
+import { CACHE, RUN, ROOT, capture, fail, log, portListening, portOpen, run, sleep, waitFor, warn } from './util.ts';
 import { dbReachable } from './db.ts';
 import { readState, shareTable } from './share/state.ts';
 import { dim, next, status as statusWord, step, streamRow, table, yellow } from './output.ts';
@@ -169,7 +169,7 @@ async function firstStartCommands(instance: Instance, since: number): Promise<vo
 export async function start(config: DevConfig, names: string[], noBuild: boolean, acceptEula: boolean): Promise<void> {
   const instances = select(config, names);
   if (instances.some((instance) => instance.platform === 'paper') && !acceptEula) {
-    fail('Set accept_eula = true in dev/dev.local.toml to accept the Minecraft EULA (https://aka.ms/MinecraftEULA).');
+    fail('Set accept_eula = true in .mcdevtools/config.local.toml to accept the Minecraft EULA (https://aka.ms/MinecraftEULA).');
   }
   const resolved = await readResolved();
   if (!noBuild) {
@@ -308,7 +308,7 @@ export async function resetWorld(config: DevConfig, name: string): Promise<void>
 export async function clean(all: boolean): Promise<void> {
   await rm(RUN, { recursive: true, force: true });
   if (all) {
-    await rm(join(ROOT, 'dev', '.cache'), { recursive: true, force: true });
+    await rm(CACHE, { recursive: true, force: true });
   }
 }
 

@@ -51,7 +51,7 @@ export function dotDir(instance: Instance): string {
  */
 export function socketPath(instance: Instance, suffix = ''): string {
   const checkout = createHash('sha1').update(RUN).digest('hex').slice(0, 8);
-  const dir = join(tmpdir(), `paradisu-dev-${process.getuid?.() ?? 'u'}`);
+  const dir = join(tmpdir(), `mcdev-${process.getuid?.() ?? 'u'}`);
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   return join(dir, `${checkout}-${instance.name}${suffix}.sock`);
 }

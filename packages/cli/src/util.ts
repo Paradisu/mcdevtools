@@ -7,15 +7,25 @@ import { dirname, join, resolve } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { paint } from './output.ts';
+import { resolveProject } from './project.ts';
 
-export const ROOT = resolve(import.meta.dirname, '..', '..');
-export const DEV = join(ROOT, 'dev');
-export const RUN = join(DEV, 'run');
-export const CACHE = join(DEV, '.cache');
-export const TEMPLATES = join(DEV, 'templates');
+/** The project being developed and the mcdevtools checkout; resolved once at startup (see project.ts) */
+export const PROJECT = resolveProject();
+/** The project root: commands run here by default */
+export const ROOT = PROJECT.root;
+/** The mcdevtools checkout */
+export const TOOL_ROOT = PROJECT.toolRoot;
+/** `<root>/.mcdevtools`: project config, extensions, seeds, profiles */
+export const CONFIG_DIR = PROJECT.configDir;
+export const RUN = join(CONFIG_DIR, 'run');
+export const CACHE = join(CONFIG_DIR, '.cache');
+/** Templates shipped with mcdevtools, applied first */
+export const CORE_TEMPLATES = join(TOOL_ROOT, 'packages', 'cli', 'templates');
+/** The project's templates (committed), applied after the core ones */
+export const TEMPLATES = join(CONFIG_DIR, 'templates');
 /** Personal config overrides (gitignored), laid out like TEMPLATES and applied after it; exported by profiles */
-export const TEMPLATES_LOCAL = join(DEV, 'templates.local');
-export const USER_AGENT = 'paradisu-dev/1 (github.com/Paradisu/ParadisuPlugin)';
+export const TEMPLATES_LOCAL = join(CONFIG_DIR, 'templates.local');
+export const USER_AGENT = 'mcdevtools/0.1 (github.com/Paradisu/mcdevtools)';
 
 /** An expected failure: printed without a stack trace. */
 export class DevError extends Error {}

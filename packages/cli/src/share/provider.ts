@@ -3,7 +3,7 @@
  *
  * To add a provider (ngrok, Pangolin, ...): implement `ProviderFactory` in `providers/<name>.ts` (import the
  * service's SDK lazily inside `create`, so it is only loaded when selected, and make it an optional dependency),
- * register it in `providers/index.ts`, and document its options under `[share.providers.<name>]` in dev.toml.
+ * register it in `providers/index.ts`, and document its options under `[share.providers.<name>]` in config.toml.
  * Nothing else in `dev` knows about a specific service. For ngrok, `open` would be roughly:
  *
  *   const listener = await ngrok.forward({ addr: port, proto: 'tcp', authtoken });

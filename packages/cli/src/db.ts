@@ -4,10 +4,10 @@ import { mkdir, readdir } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { env } from './config.ts';
 import { confirmAction } from './prompt.ts';
-import { DEV, ROOT, capture, fail, log, run } from './util.ts';
+import { CONFIG_DIR, ROOT, capture, fail, log, run } from './util.ts';
 
-const SEEDS = join(DEV, 'db', 'seed');
-const SNAPSHOTS = join(DEV, 'db', 'snapshots');
+const SEEDS = join(CONFIG_DIR, 'db', 'seed');
+const SNAPSHOTS = join(CONFIG_DIR, 'db', 'snapshots');
 const DEVTOOLS = join(ROOT, 'devtools', 'migrate', 'build', 'install', 'migrate', 'bin', 'migrate');
 
 export function pgEnv(database?: string): Record<string, string> {

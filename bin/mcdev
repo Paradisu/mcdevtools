@@ -1,5 +1,16 @@
 #!/usr/bin/env bash
+# mcdev launcher: installs dependencies on first use, then runs the CLI under Node's TypeScript stripping.
 set -euo pipefail
-DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
-[ -d "$DIR/node_modules" ] || pnpm --dir "$DIR" install --frozen-lockfile
-exec node --disable-warning=ExperimentalWarning "$DIR/src/cli.ts" "$@"
+TOOL_ROOT="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+
+# Dependencies live in the nearest pnpm workspace root above the checkout (a project that added this repo as a
+# submodule), or in the checkout itself when it is used standalone.
+INSTALL_ROOT="$TOOL_ROOT"
+dir="$(dirname "$TOOL_ROOT")"
+while [ "$dir" != "/" ]; do
+  if [ -f "$dir/pnpm-workspace.yaml" ]; then INSTALL_ROOT="$dir"; break; fi
+  dir="$(dirname "$dir")"
+done
+[ -d "$INSTALL_ROOT/node_modules" ] || pnpm --dir "$INSTALL_ROOT" install --frozen-lockfile
+
+exec node --disable-warning=ExperimentalWarning "$TOOL_ROOT/packages/cli/src/cli.ts" "$@"
