@@ -11,6 +11,7 @@ import { dbReachable } from './db.ts';
 import { readState, shareTable } from './share/state.ts';
 import { dim, next, status as statusWord, step, streamRow, table, yellow } from './output.ts';
 import { attach, dotDir, isRunning, javaPid, kill, runLine, sendLine, socketPath, spawnSupervisor } from './supervisor.ts';
+import { pendingGameTestFlags } from './testing/gametest-state.ts';
 import { runnerWanted, writeSuitesFile } from './testing/manual.ts';
 import { RESULTS_DIR, SUITES_FILE } from './testing/paths.ts';
 import { controlSocket } from './capture/paths.ts';
@@ -131,6 +132,8 @@ async function launch(config: DevConfig, minecraft: string, instance: Instance, 
     ...(runnerWanted(config, instance)
       ? [`-Dmcdevtools.test.socket=${socketPath(instance, '-test')}`, `-Dmcdevtools.test.suites=${SUITES_FILE}`, `-Dmcdevtools.test.results=${RESULTS_DIR}`]
       : []),
+    // `mcdev test gametest` makes a loader instance run its GameTests and stop
+    ...pendingGameTestFlags(instance.name, instance.def.type),
     // Everything with netty gets the capture Java agent (Limbo has a plugin instead); proxies also hook their outbound connections
     ...(withCapture && instance.def.capture === 'agent' ? agentFlags(instance) : []),
     // No X11 libraries in the image, and a forwarded DISPLAY (WSLg) would otherwise make AWT load them (BKCommonLib fails)

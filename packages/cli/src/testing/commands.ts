@@ -4,6 +4,7 @@ import { ensureTestkit } from '../java.ts';
 import { keyValue, next } from '../output.ts';
 import { capture, fail, log } from '../util.ts';
 import { testEnv, writeTestEnv } from './env.ts';
+import { GAMETEST_COMMANDS } from './gametest.ts';
 import { MANUAL_COMMANDS } from './manual-run.ts';
 import { RUN_COMMANDS } from './run.ts';
 
@@ -53,4 +54,5 @@ export const TEST_COMMANDS: Command[] = [
   },
   ...RUN_COMMANDS,
   ...MANUAL_COMMANDS,
+  ...GAMETEST_COMMANDS,
 ];

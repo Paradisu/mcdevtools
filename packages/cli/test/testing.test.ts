@@ -112,3 +112,26 @@ test('a manual suite names the file and test when it is invalid', () => {
   bad('[[tests]]\nid = "a"\ntitle = "T"\nsteps = ["s"]', /what to expect/);
   bad('[[tests]]\nid = "a"\ntitle = "T"\nsteps = ["s"]\nexpect = "e"\n[[tests]]\nid = "a"\ntitle = "U"\nsteps = ["s"]\nexpect = "e"', /duplicate test id "a"/);
 });
+
+const { gametestFlags, pendingGameTestFlags, registerGameTestRun, clearGameTestRun } = await import('../src/testing/gametest-state.ts');
+
+test('Fabric GameTest flags carry the report file and the optional filter', () => {
+  assert.deepEqual(gametestFlags('fabric', { report: '/r.xml' }), ['-Dfabric-api.gametest', '-Dfabric-api.gametest.report-file=/r.xml']);
+  assert.deepEqual(gametestFlags('fabric', { report: '/r.xml', selector: 'mymod.*' }).slice(-1), ['-Dfabric-api.gametest.filter=mymod.*']);
+});
+
+test('a platform without a GameTest report fails with what is supported and the alternative', () => {
+  assert.throws(
+    () => gametestFlags('purpur', { report: '/r.xml' }),
+    (error: Error) => error instanceof DevError && /fabric/.test(error.message) && /GameTests\.run/.test(error.message),
+  );
+});
+
+test('GameTest flags are added only to an instance with a registered run, until it is cleared', () => {
+  assert.deepEqual(pendingGameTestFlags('gt', 'fabric'), []);
+  registerGameTestRun('gt', { report: '/r.xml' });
+  assert.equal(pendingGameTestFlags('gt', 'fabric')[0], '-Dfabric-api.gametest');
+  assert.deepEqual(pendingGameTestFlags('other', 'fabric'), []);
+  clearGameTestRun('gt');
+  assert.deepEqual(pendingGameTestFlags('gt', 'fabric'), []);
+});
