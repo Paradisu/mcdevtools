@@ -20,6 +20,7 @@ package net.paradisu.mcdevtools.testkit.daemon;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import net.paradisu.mcdevtools.testkit.auth.Accounts;
 import net.paradisu.mcdevtools.testkit.bot.Bot;
 import net.paradisu.mcdevtools.testkit.bot.BotOptions;
 import net.paradisu.mcdevtools.testkit.env.TestEnvironment;
@@ -171,7 +172,8 @@ public final class BotDaemon implements Commands.BotHolder {
     /**
      * Parses daemon arguments and runs it.
      *
-     * @param args {@code --env <file> --socket <path> --name <n> [--via proxy|direct] [--to <instance>]}
+     * @param args {@code --env <file> --socket <path> --name <n> [--via proxy|direct] [--to <instance>] [--account
+     *     <a>]}
      * @throws Exception when joining fails or the socket cannot be served
      */
     public static void main(String[] args) throws Exception {
@@ -180,6 +182,7 @@ public final class BotDaemon implements Commands.BotHolder {
         String name = null;
         String via = null;
         String to = null;
+        String account = null;
         for (int i = 0; i + 1 < args.length; i += 2) {
             switch (args[i]) {
                 case "--env" -> envFile = args[i + 1];
@@ -187,6 +190,7 @@ public final class BotDaemon implements Commands.BotHolder {
                 case "--name" -> name = args[i + 1];
                 case "--via" -> via = args[i + 1];
                 case "--to" -> to = args[i + 1];
+                case "--account" -> account = args[i + 1];
                 default -> throw new IllegalArgumentException("Unknown option " + args[i]);
             }
         }
@@ -194,10 +198,17 @@ public final class BotDaemon implements Commands.BotHolder {
             throw new IllegalArgumentException("daemon needs --env, --socket and --name");
         }
         TestEnvironment env = TestEnvironment.parse(Files.readString(Path.of(envFile)));
-        BotOptions options = BotOptions.named(name);
+        // an account supplies the player's name; --name is only the label of the bot process
+        BotOptions options = account != null ? Accounts.options(env, account) : BotOptions.named(name);
         if (via != null) {
             options.via(Via.valueOf(via.toUpperCase()));
         }
-        new BotDaemon(env, options, to, Path.of(socket)).run();
+        try {
+            new BotDaemon(env, options, to, Path.of(socket)).run();
+        } catch (RuntimeException e) {
+            // A refused join is an expected outcome: one clear line for `mcdev bot start`, not a stack trace
+            System.err.println("ERROR: " + e.getMessage());
+            System.exit(1);
+        }
     }
 }

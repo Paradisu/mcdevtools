@@ -1,5 +1,5 @@
 /**
- * Reading and writing JUnit XML, the common format of Gradle, Maven and `mcdev test manual`. Only the parts a test
+ * Reading and writing JUnit XML, the common format of Gradle, Maven and `mcdev manual`. Only the parts a test
  * run needs: suites, cases, and whether a case failed, errored or was skipped. No dependency: the reports are
  * machine-written and regular.
  */

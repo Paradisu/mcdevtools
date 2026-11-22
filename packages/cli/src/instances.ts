@@ -5,12 +5,14 @@ import type { DevConfig } from './config.ts';
 import { readResolved, type ResolvedFiles } from './downloads.ts';
 import { type Instance, applyTemplates, instancesOf } from './templates.ts';
 import { capturableOf, pluginsDirOf } from './platforms/index.ts';
-import { CAPTURE_AGENT_JAR, CAPTURE_JAR, CAPTURE_JAR_NAME, ensureGradleCachesWritable, gradle } from './java.ts';
+import { CAPTURE_AGENT_JAR, CAPTURE_JAR, CAPTURE_JAR_NAME, TESTKIT_PAPER_JAR, TESTKIT_PAPER_JAR_NAME, ensureGradleCachesWritable, gradle } from './java.ts';
 import { CACHE, RUN, ROOT, capture, fail, log, portListening, portOpen, run, sleep, waitFor, warn } from './util.ts';
 import { dbReachable } from './db.ts';
 import { readState, shareTable } from './share/state.ts';
 import { dim, next, status as statusWord, step, streamRow, table, yellow } from './output.ts';
-import { attach, dotDir, isRunning, javaPid, kill, runLine, sendLine, spawnSupervisor } from './supervisor.ts';
+import { attach, dotDir, isRunning, javaPid, kill, runLine, sendLine, socketPath, spawnSupervisor } from './supervisor.ts';
+import { runnerWanted, writeSuitesFile } from './testing/manual.ts';
+import { RESULTS_DIR, SUITES_FILE } from './testing/paths.ts';
 import { controlSocket } from './capture/paths.ts';
 import { hintsFile } from './capture/protocol.ts';
 import { catalogGroups, hotswapFlags } from './hotswap.ts';
@@ -93,6 +95,12 @@ async function prepare(config: DevConfig, resolved: ResolvedFiles, instance: Ins
       wanted.set(basename(artifact.path), source);
     }
   }
+  if (runnerWanted(config, instance)) {
+    if (!existsSync(TESTKIT_PAPER_JAR)) {
+      fail(`${TESTKIT_PAPER_JAR} does not exist; run \`mcdev build\` (or set [test] in_game = false)`);
+    }
+    wanted.set(TESTKIT_PAPER_JAR_NAME, TESTKIT_PAPER_JAR);
+  }
   if (withCapture && instance.def.capture === 'plugin') {
     if (!existsSync(CAPTURE_JAR)) {
       fail(`${CAPTURE_JAR} does not exist; run \`mcdev build\` (or set capture.enabled = false)`);
@@ -118,6 +126,10 @@ async function launch(config: DevConfig, minecraft: string, instance: Instance, 
     // Capture does nothing without its control socket
     ...(withCapture
       ? [`-Dmcdevtools.capture.socket=${controlSocket(instance)}`, `-Dmcdevtools.capture.protocol=${hintsFile(minecraft)}`]
+      : []),
+    // The in-game manual test runner finds its socket, suites and results folder through these
+    ...(runnerWanted(config, instance)
+      ? [`-Dmcdevtools.test.socket=${socketPath(instance, '-test')}`, `-Dmcdevtools.test.suites=${SUITES_FILE}`, `-Dmcdevtools.test.results=${RESULTS_DIR}`]
       : []),
     // Everything with netty gets the capture Java agent (Limbo has a plugin instead); proxies also hook their outbound connections
     ...(withCapture && instance.def.capture === 'agent' ? agentFlags(instance) : []),
@@ -213,6 +225,9 @@ export async function start(config: DevConfig, names: string[], noBuild: boolean
   const resolved = await readResolved();
   if (!noBuild) {
     await build(config);
+  }
+  if (config.test.in_game) {
+    await writeSuitesFile(config);
   }
   if (config.db?.required && !(await waitFor(() => dbReachable(), 60_000, 2000))) {
     fail('PostgreSQL is not reachable (check MCDEV_DB_HOST).');
@@ -372,6 +387,10 @@ export async function build(config: DevConfig): Promise<void> {
     log(dim('Building the capture tools'));
     gradle([':capture:jar', ':capture-agent:shadowJar']);
   }
+  if (config.test.in_game) {
+    log(dim('Building the in-game test runner'));
+    gradle([':testkit-paper:jar']);
+  }
 }
 
 /**
@@ -385,7 +404,7 @@ export async function rerender(config: DevConfig, name: string): Promise<boolean
     return false;
   }
   const names: string[] = JSON.parse(await readFile(manifestPath, 'utf8'));
-  const own = new Set([CAPTURE_JAR_NAME, ...config.build.artifacts.map((artifact) => basename(artifact.path))]);
+  const own = new Set([CAPTURE_JAR_NAME, TESTKIT_PAPER_JAR_NAME, ...config.build.artifacts.map((artifact) => basename(artifact.path))]);
   const keys = names.filter((jar) => !own.has(jar)).map((jar) => jar.slice(0, -'.jar'.length));
   await applyTemplates(config, instance, keys);
   return true;

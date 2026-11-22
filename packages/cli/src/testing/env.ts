@@ -10,6 +10,7 @@ import { dotDir, isRunning, socketPath } from '../supervisor.ts';
 import { type Instance, instancesOf } from '../templates.ts';
 import { resolveForwarding } from '../topology.ts';
 import { CACHE, CONFIG_DIR, RUN, ROOT, TOOL_ROOT } from '../util.ts';
+import { RESULTS_DIR, TEST_STATE } from './paths.ts';
 
 /**
  * The test environment: everything a test or a bot needs to know about the running network, in one JSON document
@@ -55,9 +56,7 @@ export interface TestEnv {
 }
 
 /** Where `writeTestEnv` puts the file. */
-export const ENV_FILE = join(RUN, '.test', 'env.json');
-
-export const RESULTS_DIR = join(CONFIG_DIR, 'test-results');
+export const ENV_FILE = join(TEST_STATE, 'env.json');
 
 function describe(config: DevConfig, instance: Instance): TestEnvInstance {
   const network = instance.network;
@@ -114,7 +113,7 @@ export async function testEnv(config: DevConfig): Promise<TestEnv> {
 /** Writes env.json and returns its path. */
 export async function writeTestEnv(config: DevConfig): Promise<string> {
   const env = await testEnv(config);
-  await mkdir(join(RUN, '.test'), { recursive: true });
+  await mkdir(TEST_STATE, { recursive: true });
   await writeFile(ENV_FILE, `${JSON.stringify(env, null, 2)}\n`);
   return ENV_FILE;
 }

@@ -9,4 +9,4 @@ commands:
     permission: mcdevtools.test
 permissions:
   mcdevtools.test:
-    default: op
+    default: true

@@ -21,7 +21,9 @@ import net.paradisu.mcdevtools.testkit.daemon.BotDaemon;
 
 import java.util.Arrays;
 
-/** Entry point of the {@code testkit} tool that {@code mcdev} runs: {@code daemon} and {@code doctor}. */
+/**
+ * Entry point of the {@code testkit} tool that {@code mcdev} runs: {@code daemon}, {@code doctor} and {@code login}.
+ */
 public final class TestkitMain {
     private TestkitMain() {}
 
@@ -40,6 +42,7 @@ public final class TestkitMain {
         switch (args[0]) {
             case "daemon" -> BotDaemon.main(rest);
             case "doctor" -> System.exit(Doctor.run(rest));
+            case "login" -> System.exit(Login.run(rest));
             default -> {
                 System.err.println("Unknown subcommand " + args[0]);
                 System.exit(2);

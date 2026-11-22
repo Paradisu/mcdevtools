@@ -9,6 +9,8 @@ process.env.MCDEV_PROJECT = join(import.meta.dirname, 'fixtures', 'extension-pro
 const { parseJunit, writeJunit } = await import('../src/testing/junit.ts');
 const { collectReports, findReportDirs, globToRegex } = await import('../src/testing/run.ts');
 const { loadConfig } = await import('../src/config.ts');
+const { parseSuite } = await import('../src/testing/manual.ts');
+const { DevError } = await import('../src/util.ts');
 
 const XML = `<?xml version="1.0" encoding="UTF-8"?>
 <testsuite name="net.x.JoinTest" tests="3" skipped="1" failures="1" errors="0" time="2.5">
@@ -74,4 +76,39 @@ test('the [test] config has defaults, and its failure patterns are valid regexes
   const [error] = config.test.log_fail_patterns.map((p) => new RegExp(p));
   assert.ok(error!.test('[12:00:00 ERROR]: boom'));
   assert.ok(!error!.test('[12:00:00 INFO]: no TERRORS here'));
+});
+
+const SUITE = `
+title = "Warps"
+on = "lobby"
+[[tests]]
+id = "warp-menu"
+title = "Warp menu teleports"
+setup = ["lp user {player} permission set paradisu.warp true"]
+steps = ["Run /warps", "Click the first warp"]
+expect = "You are teleported"
+cleanup = ["lp user {player} clear"]
+[[tests]]
+id = "back"
+title = "Back command"
+steps = ["Run /back"]
+expect = "You return to the previous location"
+`;
+
+test('a manual suite parses with defaults for setup and cleanup', () => {
+  const suite = parseSuite('warps', SUITE);
+  assert.equal(suite.title, 'Warps');
+  assert.equal(suite.on, 'lobby');
+  assert.deepEqual(suite.tests.map((t) => t.id), ['warp-menu', 'back']);
+  assert.deepEqual(suite.tests[1]!.setup, []);
+  assert.deepEqual(suite.tests[0]!.cleanup, ['lp user {player} clear']);
+});
+
+test('a manual suite names the file and test when it is invalid', () => {
+  const bad = (source: string, pattern: RegExp) => assert.throws(() => parseSuite('x', source, 'x.toml'), (error: Error) => error instanceof DevError && pattern.test(error.message));
+  bad('title = "T"', /needs at least one/);
+  bad('[[tests]]\nid = "a b"\ntitle = "T"\nsteps = ["s"]\nexpect = "e"', /id must be/);
+  bad('[[tests]]\nid = "a"\ntitle = "T"\nsteps = []\nexpect = "e"', /at least one step/);
+  bad('[[tests]]\nid = "a"\ntitle = "T"\nsteps = ["s"]', /what to expect/);
+  bad('[[tests]]\nid = "a"\ntitle = "T"\nsteps = ["s"]\nexpect = "e"\n[[tests]]\nid = "a"\ntitle = "U"\nsteps = ["s"]\nexpect = "e"', /duplicate test id "a"/);
 });

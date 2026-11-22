@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import { closeSync, existsSync, openSync, readFileSync, readdirSync } from 'node:fs';
+import { createInterface } from 'node:readline';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { connect } from 'node:net';
 import { join } from 'node:path';
@@ -7,11 +8,12 @@ import { parseArgs } from 'node:util';
 import type { Command } from '../command.ts';
 import type { DevConfig } from '../config.ts';
 import { ensureTestkit } from '../java.ts';
-import { next, status, table } from '../output.ts';
+import { bold, next, status, table } from '../output.ts';
 import { socketPath } from '../supervisor.ts';
 import type { Instance } from '../templates.ts';
-import { RUN, capture, fail, log, sleep } from '../util.ts';
+import { capture, fail, log, sleep } from '../util.ts';
 import { writeTestEnv } from './env.ts';
+import { TEST_STATE } from './paths.ts';
 
 /**
  * `mcdev bot`: headless players. Each bot is a long-running Java process (the testkit's bot daemon, see
@@ -19,7 +21,7 @@ import { writeTestEnv } from './env.ts';
  * player over many separate invocations. State lives in `.mcdevtools/run/.test/bots/<name>/`.
  */
 
-const BOTS = join(RUN, '.test', 'bots');
+const BOTS = join(TEST_STATE, 'bots');
 const NAME = /^[A-Za-z0-9_]{3,16}$/;
 
 interface BotState {
@@ -95,6 +97,12 @@ export function botRequest(name: string, line: string, timeoutMs: number): Promi
   });
 }
 
+/** Why a bot process ended: its last `ERROR:` line (the daemon prints one for an expected failure), else the log's tail. */
+function reasonOf(file: string): string {
+  const errors = existsSync(file) ? readFileSync(file, 'utf8').split('\n').filter((line) => line.startsWith('ERROR: ')) : [];
+  return errors.length > 0 ? errors[errors.length - 1]!.slice('ERROR: '.length) : tail(file);
+}
+
 function tail(file: string, lines = 15): string {
   return existsSync(file) ? readFileSync(file, 'utf8').trimEnd().split('\n').slice(-lines).join('\n') : '(no log)';
 }
@@ -137,7 +145,7 @@ async function startBot(
   while (Date.now() < deadline) {
     if (!alive(pid)) {
       await rm(join(dir, 'state.json'), { force: true });
-      fail(`Bot ${name} could not join:\n${tail(logPath)}`);
+      fail(`Bot ${name} could not join: ${reasonOf(logPath)}`);
     }
     try {
       const reply = await botRequest(name, 'status', 2000);
@@ -235,6 +243,43 @@ export const BOT_COMMANDS: Command[] = [
       if (!reply.ok) {
         process.exitCode = 1;
       }
+    },
+  },
+  {
+    name: 'bot login',
+    usage: '<account>',
+    summary: 'Sign a Microsoft account in for online-mode networks',
+    details:
+      'Only needed to join through a proxy that runs in online mode; bots reach backends directly without an account. ' +
+      'Prints a code to enter at microsoft.com/link and saves the session (refreshed on use) under .mcdevtools/.cache/accounts ' +
+      'with owner-only permissions. Then: `mcdev bot start <name> --account <account>`.',
+    run: async ({ config }, args) => {
+      const account = args[0] ?? fail('Which account name? `mcdev bot login <account>`');
+      if (!/^[A-Za-z0-9_-]{1,32}$/.test(account)) fail('Account names are letters, digits, - and _');
+      const bin = ensureTestkit();
+      const envFile = await writeTestEnv(config);
+      const child = spawn(bin, ['login', '--env', envFile, '--account', account], { stdio: ['ignore', 'pipe', 'inherit'] });
+      let result: { t: string; name?: string; message?: string } | undefined;
+      for await (const line of createInterface({ input: child.stdout })) {
+        let event: { t: string; url?: string; direct?: string; code?: string; name?: string; message?: string };
+        try {
+          event = JSON.parse(line);
+        } catch {
+          continue; // JVM warnings
+        }
+        if (event.t === 'code') {
+          log(`Open ${bold(event.url ?? 'https://www.microsoft.com/link')} and enter the code ${bold(event.code ?? '?')}`);
+          if (event.direct) log(`or go straight to ${event.direct}`);
+          log('Waiting for you to sign in...');
+        } else {
+          result = event;
+        }
+      }
+      if (result?.t !== 'done') {
+        fail(`Login failed: ${result?.message ?? 'the login process ended without a result'}`);
+      }
+      log(`${status('ok')} Signed in as ${result.name}. Saved as account "${account}".`);
+      next(`mcdev bot start <name> --account ${account}`);
     },
   },
   {

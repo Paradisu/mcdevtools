@@ -2,7 +2,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { dim, green, red, status, table, yellow } from '../output.ts';
 import { ROOT } from '../util.ts';
-import { RESULTS_DIR } from './env.ts';
+import { RESULTS_DIR } from './paths.ts';
 import type { TestCase } from './junit.ts';
 
 /**
