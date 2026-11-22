@@ -14,3 +14,5 @@ plugins {
 include(":capture")
 include(":capture-agent")
 include(":liquibase-runner")
+include(":testkit")
+include(":testkit-paper")

@@ -18,6 +18,10 @@ export interface ProtocolFile {
   packets: Record<string, Record<string, Record<string, string>>>;
   /** Id of `minecraft:player` in the entity type registry; absent in protocol files made before exporters needed it */
   playerEntityType?: number;
+  /** Item names by protocol id (the testkit names inventory items with it); absent in older files */
+  items?: string[];
+  /** Entity type names by protocol id; absent in older files */
+  entityTypes?: string[];
 }
 
 export interface PacketKey {
@@ -30,6 +34,8 @@ export class ProtocolTable {
   readonly minecraftVersion: string;
   readonly protocolVersion: number;
   readonly playerEntityType: number | undefined;
+  readonly items: string[] | undefined;
+  readonly entityTypes: string[] | undefined;
   private readonly names = new Map<string, string>();
   private readonly ids = new Map<string, number>();
   private readonly entries: { key: PacketKey; name: string }[] = [];
@@ -38,6 +44,8 @@ export class ProtocolTable {
     this.minecraftVersion = file.minecraftVersion;
     this.protocolVersion = file.protocolVersion;
     this.playerEntityType = file.playerEntityType;
+    this.items = file.items;
+    this.entityTypes = file.entityTypes;
     for (const [state, dirs] of Object.entries(file.packets)) {
       for (const [dir, ids] of Object.entries(dirs)) {
         for (const [id, name] of Object.entries(ids)) {
@@ -132,6 +140,19 @@ function idOf(report: PacketReport, state: string, dir: (typeof DIRECTIONS)[numb
   return id ?? fail(`Mojang's packet report has no ${state}/${dir}/${name}; update the transition names in capture/protocol.ts`);
 }
 
+/** Names of a registry indexed by protocol id (gaps stay empty strings). */
+function registryNames(registries: RegistryReport | undefined, registry: string): string[] | undefined {
+  const entries = registries?.[registry]?.entries;
+  if (!entries) {
+    return undefined;
+  }
+  const names: string[] = [];
+  for (const [name, info] of Object.entries(entries)) {
+    names[info.protocol_id] = name;
+  }
+  return Array.from(names, (name) => name ?? '');
+}
+
 /** Builds protocol.json and capture-protocol.properties from Mojang's packet report. Exported for tests. */
 export function buildProtocol(
   report: PacketReport,
@@ -156,7 +177,9 @@ export function buildProtocol(
     '',
   ].join('\n');
   const playerEntityType = registries?.['minecraft:entity_type']?.entries['minecraft:player']?.protocol_id;
-  return { file: { minecraftVersion, protocolVersion, packets, playerEntityType }, properties };
+  const items = registryNames(registries, 'minecraft:item');
+  const entityTypes = registryNames(registries, 'minecraft:entity_type');
+  return { file: { minecraftVersion, protocolVersion, packets, playerEntityType, items, entityTypes }, properties };
 }
 
 /**
@@ -171,10 +194,10 @@ export async function ensureProtocol(config: DevConfig, refresh = false): Promis
   const jsonPath = join(dir, 'protocol.json');
   if (!refresh && existsSync(jsonPath) && existsSync(hintsFile(minecraft))) {
     const cached = await loadProtocolFile(jsonPath);
-    if (cached.playerEntityType !== undefined) {
+    if (cached.playerEntityType !== undefined && cached.items !== undefined) {
       return cached;
     }
-    // Made before the exporters needed the player entity type; regenerate once.
+    // Made before the exporters and the testkit needed the player entity type and the item names; regenerate once.
   }
   log(`Generating the packet table for Minecraft ${minecraft}`);
   await mkdir(dir, { recursive: true });

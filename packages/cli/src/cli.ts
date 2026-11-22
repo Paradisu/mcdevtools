@@ -13,6 +13,8 @@ import { COMMANDS as ZELLIJ_COMMANDS, offerUi } from './zellij.ts';
 import { COMMANDS as PROFILE_COMMANDS } from './profile.ts';
 import { SHARE_COMMANDS, stopShare } from './share/commands.ts';
 import { CAPTURE_COMMANDS } from './capture/commands.ts';
+import { BOT_COMMANDS } from './testing/bot.ts';
+import { TEST_COMMANDS } from './testing/commands.ts';
 import { configDataVersion, mcCommands } from './mc/commands.ts';
 import { askOptional, askText, disableInput, interactive, isPromptExit, pickFrom, pickInstance, pickInstances } from './prompt.ts';
 import type { Instance } from './templates.ts';
@@ -220,7 +222,7 @@ const COMMANDS: Command[] = [
   },
 ];
 
-COMMANDS.push(...ZELLIJ_COMMANDS, ...SHARE_COMMANDS, ...CAPTURE_COMMANDS, ...PROFILE_COMMANDS);
+COMMANDS.push(...ZELLIJ_COMMANDS, ...SHARE_COMMANDS, ...CAPTURE_COMMANDS, ...BOT_COMMANDS, ...TEST_COMMANDS, ...PROFILE_COMMANDS);
 
 /** Commands that need the loaded config are registered lazily in main(). */
 function registerConfigCommands(config: DevConfig): void {

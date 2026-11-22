@@ -1,0 +1,12 @@
+name: McDevTest
+main: net.paradisu.mcdevtools.testkit.paper.McDevTestPlugin
+version: 0.1.0
+api-version: '1.21'
+description: Runs manual test suites in game for mcdevtools
+commands:
+  mcdevtest:
+    description: Run mcdevtools manual tests
+    permission: mcdevtools.test
+permissions:
+  mcdevtools.test:
+    default: op

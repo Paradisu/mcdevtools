@@ -180,6 +180,25 @@ export interface CaptureConfig {
   queue_capacity: number;
 }
 
+export interface TestConfig {
+  /** Command that runs the project's JUnit integration tests; `mcdev test run` adds nothing to it besides the environment */
+  command: string[];
+  /** Glob (relative to the project root) of the folders that hold the JUnit XML reports */
+  reports: string;
+  /** Capture packets per test: `always`, `on-failure` (kept only when the test fails) or `never` */
+  capture: 'always' | 'on-failure' | 'never';
+  /** Export formats made from a kept capture (`mcdev capture formats`) */
+  export: string[];
+  /** Regexes: a server log line matching one fails the test that was running */
+  log_fail_patterns: string[];
+  /** Regexes that excuse a line that would otherwise fail a test */
+  log_ignore_patterns: string[];
+  /** Install the in-game manual test runner (a Paper plugin) on every Paper-family instance */
+  in_game: boolean;
+  /** Folder (relative to .mcdevtools) of the manual test suites */
+  manual_dir: string;
+}
+
 export interface DevConfig {
   /** Config schema version; see migrations/ */
   format: number;
@@ -202,6 +221,7 @@ export interface DevConfig {
   web: WebConfig;
   share: ShareConfig;
   capture: CaptureConfig;
+  test: TestConfig;
   plugins: PluginConfig[];
 }
 
@@ -253,6 +273,16 @@ function defaults(): Record<string, unknown> {
     web: { port: 8082, bind: '127.0.0.1' },
     share: { provider: 'pinggy', targets: [], renew_before_seconds: 30, proxy_protocol: 'off', providers: {} },
     capture: { enabled: false, gzip_level: 3, max_size: '512M', queue_capacity: 65536 },
+    test: {
+      command: ['./gradlew', 'integrationTest'],
+      reports: '**/build/test-results/integrationTest',
+      capture: 'on-failure',
+      export: ['flashback'],
+      log_fail_patterns: ['\\bERROR\\b', 'Exception'],
+      log_ignore_patterns: [],
+      in_game: false,
+      manual_dir: 'tests/manual',
+    },
     plugins: [],
   };
 }

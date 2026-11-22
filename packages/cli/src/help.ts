@@ -13,6 +13,8 @@ const SECTIONS: Section[] = [
   { title: 'Database', prefixes: ['db'] },
   { title: 'Sharing', prefixes: ['share'] },
   { title: 'Packet capture', prefixes: ['capture'] },
+  { title: 'Bots', prefixes: ['bot'] },
+  { title: 'Tests', prefixes: ['test'] },
   { title: 'Profiles', prefixes: ['profile', 'override'] },
   { title: 'Minecraft data', prefixes: ['mc'] },
 ];

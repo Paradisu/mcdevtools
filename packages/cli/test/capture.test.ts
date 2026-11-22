@@ -279,3 +279,18 @@ test('packet type listing merges directions per state/name', () => {
   assert.deepEqual(listing.find((entry) => entry.pattern === 'play/move_entity_pos')?.dirs, [1]);
   assert.deepEqual(listing.map((entry) => entry.pattern), [...listing.map((entry) => entry.pattern)].sort((a, b) => a.localeCompare(b)));
 });
+
+test('protocol file names items and entity types by protocol id (the testkit reads them)', () => {
+  const registries = {
+    'minecraft:item': { entries: { 'minecraft:stone': { protocol_id: 1 }, 'minecraft:air': { protocol_id: 0 }, 'minecraft:granite': { protocol_id: 3 } } },
+    'minecraft:entity_type': { entries: { 'minecraft:player': { protocol_id: 2 } } },
+  };
+  const { file } = buildProtocol(REPORT, '26.3', 777, registries);
+  // gaps in the id range stay empty strings so an index is always its protocol id
+  assert.deepEqual(file.items, ['minecraft:air', 'minecraft:stone', '', 'minecraft:granite']);
+  assert.deepEqual(file.entityTypes, ['', '', 'minecraft:player']);
+  assert.equal(file.playerEntityType, 2);
+  assert.equal(new ProtocolTable(file).items?.[3], 'minecraft:granite');
+  // files made without registries have no tables, which makes ensureProtocol regenerate them
+  assert.equal(buildProtocol(REPORT, '26.3', 777).file.items, undefined);
+});

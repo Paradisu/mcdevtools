@@ -155,7 +155,7 @@ function stopCommand(instance: Instance): string {
 }
 
 /** The current log file: most servers write logs/latest.log, Limbo names logs after its start time. */
-function logFile(instance: Instance): string | undefined {
+export function logFile(instance: Instance): string | undefined {
   if (instance.def.logFile) {
     const path = join(instance.dir, instance.def.logFile);
     return existsSync(path) ? path : undefined;

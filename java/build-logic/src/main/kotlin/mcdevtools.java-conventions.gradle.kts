@@ -18,6 +18,23 @@ repositories {
     maven("https://repo.loohpjames.com/repository") {
         content { includeGroup("com.loohp") }
     }
+    // MCProtocolLib (the testkit) and the few dependencies of it that are not on Central
+    maven("https://repo.opencollab.dev/main") {
+        content {
+            includeGroup("org.geysermc.mcprotocollib")
+            includeGroup("org.cloudburstmc.math")
+            includeGroup("com.nukkitx.fastutil")
+        }
+    }
+    // Paper API (the testkit's Paper runner plugin compiles against it)
+    maven("https://repo.papermc.io/repository/maven-public/") {
+        content {
+            includeGroup("io.papermc.paper")
+            includeGroup("io.papermc")
+            includeGroup("com.mojang")
+            includeGroup("net.md-5")
+        }
+    }
 }
 
 // Use providers.gradleProperty(...) instead of properties[...]

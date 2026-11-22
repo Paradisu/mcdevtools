@@ -14,6 +14,13 @@ export const CAPTURE_AGENT_JAR = join(JAVA_BUILD, 'capture-agent', 'build', 'lib
 
 export const LIQUIBASE_RUNNER = join(JAVA_BUILD, 'liquibase-runner', 'build', 'install', 'liquibase-runner', 'bin', 'liquibase-runner');
 
+/** The testkit's launcher (bots, doctor), built on demand by `ensureTestkit()` */
+export const TESTKIT_BIN = join(JAVA_BUILD, 'testkit', 'build', 'install', 'testkit', 'bin', 'testkit');
+
+/** The in-game manual test runner, a Paper plugin installed into Paper-family instances when `[test] in_game` is set */
+export const TESTKIT_PAPER_JAR_NAME = 'mcdevtools-testkit-paper.jar';
+export const TESTKIT_PAPER_JAR = join(JAVA_BUILD, 'testkit-paper', 'build', 'libs', TESTKIT_PAPER_JAR_NAME);
+
 /**
  * Gradle keeps per-project caches and lock files in `.gradle` directories inside the checkout, which devcontainers
  * mount as Docker volumes (see devcontainer/template). A volume created for a different user ID than the one running
@@ -45,4 +52,10 @@ export function ensureGradleCachesWritable(): void {
 export function gradle(tasks: string[]): void {
   ensureGradleCachesWritable();
   run(join(JAVA_BUILD, 'gradlew'), ['-p', JAVA_BUILD, '-q', ...tasks]);
+}
+
+/** Builds the testkit launcher and returns its path. */
+export function ensureTestkit(): string {
+  gradle([':testkit:installDist']);
+  return TESTKIT_BIN;
 }
