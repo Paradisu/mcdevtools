@@ -45,6 +45,8 @@ Without arguments on a terminal every command below asks for what it needs (a ca
 | `mcdev capture protocol [--refresh]` | Generate or show the packet name table for the current Minecraft version |
 | `mcdev capture doctor [instances...]` | Check that capture works: see [Troubleshooting](#troubleshooting) |
 
+`start`, `stop` and `export` take `--json` and print one JSON object (`{"id", "instances"}`, `{"instances": [...]}`, `{"id", "files"}` with absolute paths) for scripts; the [testkit](testing.md#packet-captures-and-replays) uses them to capture and export around tests.
+
 A capture `id` is the full id, any unique prefix, or `latest`; without one, commands on a terminal show a menu (newest first), and `show` and `export` use `latest` when scripted.
 
 ## Recording options

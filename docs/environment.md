@@ -1,6 +1,6 @@
 # Development environment
 
-`mcdev` runs a network from your working copy: proxies, backends and standalone servers, optionally with PostgreSQL and Redis. This page is the reference. Related pages: [extensions](extensions.md) · [platforms](platforms.md) · [sharing](sharing.md) · [packet capture](capture.md) · [working on the tool](tool.md).
+`mcdev` runs a network from your working copy: proxies, backends and standalone servers, optionally with PostgreSQL and Redis. This page is the reference. Related pages: [extensions](extensions.md) · [platforms](platforms.md) · [sharing](sharing.md) · [packet capture](capture.md) · [testing with bots](testing.md) · [working on the tool](tool.md).
 
 - [Getting started](#getting-started)
 - [The `mcdev` command](#the-mcdev-command)
@@ -21,7 +21,7 @@
 
 ## The `mcdev` command
 
-Run `mcdev` for a menu, a group name (`mcdev db`, `mcdev capture`, `mcdev share`, `mcdev mc`, `mcdev profile`, `mcdev web`) for that group's menu, `mcdev help` for all commands by section, `mcdev help <group|command>` (or `mcdev <command> --help`) for options. Extensions add commands and sections.
+Run `mcdev` for a menu, a group name (`mcdev db`, `mcdev capture`, `mcdev bot`, `mcdev test`, `mcdev share`, `mcdev mc`, `mcdev profile`, `mcdev web`) for that group's menu, `mcdev help` for all commands by section, `mcdev help <group|command>` (or `mcdev <command> --help`) for options. Extensions add commands and sections.
 
 - **Prompting:** missing arguments are asked for on a terminal. With arguments, with `--no-input`, with `CI` set, with `MCDEV_NO_INPUT=1` or without a terminal, `mcdev` never prompts.
 - **Destructive commands** (`db reset`, `db seed`, `db restore`, `capture rm`, `profile import`) take `--yes`; without a terminal and without it they refuse instead of waiting.
@@ -71,6 +71,8 @@ Run `mcdev` for a menu, a group name (`mcdev db`, `mcdev capture`, `mcdev share`
 | --- | --- |
 | `mcdev share start\|stop\|status\|logs\|providers` | [Sharing](sharing.md#public-tunnels-mcdev-share) |
 | `mcdev capture start\|stop\|status\|watch\|list\|show\|packet\|export\|formats\|rm\|protocol\|doctor` | [Packet capture](capture.md) |
+| `mcdev bot start\|do\|list\|stop\|logs\|login` | [Headless players](testing.md#bots) |
+| `mcdev test run\|results\|review\|env\|doctor\|gametest`, `mcdev manual list\|run` | [Integration tests, manual tests, GameTests](testing.md) |
 | `mcdev profile export\|import\|inspect\|list`, `mcdev override <instance> <path>` | [Profiles](sharing.md#sharing-a-setup-profiles) |
 | `mcdev mc nbt\|item\|encode\|uuid` | [Minecraft data tools](#minecraft-data-tools) |
 
@@ -92,6 +94,7 @@ The config is [`.mcdevtools/config.toml`](../packages/cli/scaffold/config.toml) 
 | `[ui]`, `[web]` | zellij layout and session (the session defaults to the project folder's name); web console port and bind |
 | `[share]` | Tunnel provider, targets (default: every proxy and standalone instance), renewal, PROXY protocol |
 | `[capture]` | Packet capture: `enabled`, `gzip_level`, `max_size`, `queue_capacity` |
+| `[test]` | Integration tests: `command`, `reports`, `capture`, `export`, `log_fail_patterns`, `log_ignore_patterns`, `in_game`, `manual_dir` ([details](testing.md#configuration)) |
 
 ### Instances and networks
 

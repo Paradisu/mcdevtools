@@ -14,13 +14,13 @@ The easiest place to work is the dev container image of this repository's users:
 
 ## Where things live
 
-See the layout in [docs/tool.md](docs/tool.md#layout). In short: `packages/cli` (the CLI), `packages/init` (`init`/`update`), `java/` (capture agent and Limbo plugin, Liquibase runner), `devcontainer/`, `docs/`.
+See the layout in [docs/tool.md](docs/tool.md#layout). In short: `packages/cli` (the CLI), `packages/init` (`init`/`update`), `java/` (capture agent and Limbo plugin, Liquibase runner, testkit and its in-game runner), `devcontainer/`, `docs/`.
 
 ## Principles
 
 1. **Generic core, projects extend.** Nothing here names a project. A project's commands, server types, template variables and hooks live in its `.mcdevtools/extensions/`; if the extension API cannot express what a project needs, add the missing registry or hook ([docs/extensions.md](docs/extensions.md)).
 2. **Same experience everywhere.** Prompting, output style and `--no-input` behavior are uniform ([docs/tool.md](docs/tool.md#output-style)).
-3. **Old data keeps working.** Capture dumps, profiles and configs are versioned and older versions stay readable.
+3. **Old data keeps working.** Capture dumps, profiles, configs and the test environment file are versioned and older versions stay readable (or are rejected with a message that says which tool to update).
 4. **Say what was verified.** Typecheck and tests prove it compiles; run the flow in a real project and report what you could not.
 
 ## Making a change

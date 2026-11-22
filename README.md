@@ -4,6 +4,7 @@ A local development network for Minecraft plugin projects, driven by one CLI (`m
 
 - Runs a proxy, backends and standalone servers from your working copy: downloads the servers and plugins, builds your project, deploys the jar, applies preset configs and supervises the consoles.
 - Debugging and hot reload (JetBrains Runtime, HotswapAgent), zellij console workspaces, public tunnels, shareable setups.
+- Headless test players on the latest protocol (join, chat, commands, movement, menus), JUnit integration with per-test logs, console output and packet captures exported for replay, an in-game manual test runner with PASS/FAIL buttons, and GameTest runs.
 - Packet capture on every server type (one Java agent for every server and proxy, so there is no plugin or mod to build per ecosystem, and a small plugin for Limbo, which has no netty), with export to Flashback, ReplayMod, Sniffcraft and JSON lines.
 - Optional PostgreSQL and Redis with seeded migrations (Liquibase built in).
 - Server types: Purpur, Paper, Folia and other Paper forks, Velocity, BungeeCord, Waterfall, ViaProxy, Fabric, Forge, NeoForge, SpongeVanilla and Limbo, in networks with several proxies or standalone, each on its own JDK if needed.
@@ -44,7 +45,7 @@ Node 24+ and pnpm. The server runtimes, JetBrains Runtime 25, PostgreSQL client,
 - [Development environment](docs/environment.md): commands, configuration, debugging, consoles, database, troubleshooting.
 - [Extensions](docs/extensions.md): adding project-specific commands, server types, hooks.
 - [Platforms](docs/platforms.md): the server types and how forwarding works.
-- [Packet capture](docs/capture.md) and [sharing](docs/sharing.md).
+- [Packet capture](docs/capture.md), [testing with bots](docs/testing.md) and [sharing](docs/sharing.md).
 - [Working on mcdevtools](docs/tool.md) and [CONTRIBUTING.md](CONTRIBUTING.md); coding agents: [AGENTS.md](AGENTS.md).
 
 ## License

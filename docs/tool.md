@@ -16,7 +16,7 @@ bin/mcdev                 bash launcher (installs dependencies on first use, the
 packages/cli/             the mcdev CLI ("@mcdevtools/cli"); TypeScript run directly by Node 24
   src/  test/  templates/  scaffold/  zellij/  layouts/
 packages/init/            "npx github:Paradisu/mcdevtools init|update": plain JavaScript, no dependencies
-java/                     standalone Gradle build: capture agent and Limbo plugin, Liquibase runner (also an included build of projects)
+java/                     standalone Gradle build: capture agent and Limbo plugin, Liquibase runner, testkit (bots, JUnit support) and its in-game runner plugin (also an included build of projects)
 devcontainer/             the image Dockerfile, the mcdev wrapper, the adopter template
 docs/
 ```
@@ -42,6 +42,7 @@ docs/
 | `profile.ts` | `mcdev profile` and `mcdev override` |
 | `mc/` | Minecraft data codecs (NBT, SNBT, items, UUIDs) and the generic `mc` commands |
 | `capture/` | `mcdev capture` ([details](capture.md#how-it-works-and-extending-it)) |
+| `testing/` | `mcdev bot`, `mcdev test` and `mcdev manual`: the test environment file, bot processes, test runs and results, manual suites, GameTests ([details](testing.md#how-it-works-and-extending-it)) |
 | `share/` | `mcdev share` and the tunnel providers |
 
 ## Rules
