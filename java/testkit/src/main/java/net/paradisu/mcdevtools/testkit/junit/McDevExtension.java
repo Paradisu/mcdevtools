@@ -79,7 +79,7 @@ public final class McDevExtension implements BeforeEachCallback, AfterEachCallba
     private static TestEnvironment environment(ExtensionContext context) {
         return context.getRoot()
                 .getStore(NS)
-                .getOrComputeIfAbsent("env", key -> TestEnvironment.load(), TestEnvironment.class);
+                .computeIfAbsent("env", key -> TestEnvironment.load(), TestEnvironment.class);
     }
 
     private static State state(ExtensionContext context) {

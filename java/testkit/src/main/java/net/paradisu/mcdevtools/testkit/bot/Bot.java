@@ -312,7 +312,7 @@ public final class Bot implements AutoCloseable {
             UUID uuid = ForwardingResponder.offlineUuid(options.name);
             next.setFlag(MinecraftConstants.CLIENT_HOST, ForwardingResponder.legacyHost(host, "127.0.0.1", uuid));
         }
-        next.addListener(new Listener(next));
+        next.addListener(new Listener());
         session = next;
         this.host = host;
         this.port = port;
@@ -323,12 +323,6 @@ public final class Bot implements AutoCloseable {
 
     /** The packet listener of one session; stale sessions (before a transfer) are ignored. */
     private final class Listener extends SessionAdapter {
-        private final ClientNetworkSession own;
-
-        Listener(ClientNetworkSession own) {
-            this.own = own;
-        }
-
         @Override
         public void packetReceived(Session s, Packet packet) {
             if (s != session) {
@@ -830,6 +824,17 @@ public final class Bot implements AutoCloseable {
     }
 
     /**
+     * The player's entity id on the current server (needed to attack or interact with the player from another bot).
+     *
+     * @return the entity id
+     */
+    public int entityId() {
+        synchronized (stateLock) {
+            return entityId;
+        }
+    }
+
+    /**
      * Health in half hearts.
      *
      * @return the health
@@ -859,7 +864,8 @@ public final class Bot implements AutoCloseable {
     public String status() {
         synchronized (stateLock) {
             return "name=" + options.name + " state=" + (inGame() ? "connected" : "disconnected") + " server="
-                    + server() + String.format(" pos=%.1f,%.1f,%.1f", x, y, z) + " health=" + health + " food=" + food
+                    + server() + String.format(" pos=%.1f,%.1f,%.1f", x, y, z) + " entity=" + entityId + " health="
+                    + health + " food=" + food
                     + " gamemode=" + gameMode + " screen="
                     + (screen == null ? "none" : screen.type() + " \"" + screen.title() + "\"");
         }

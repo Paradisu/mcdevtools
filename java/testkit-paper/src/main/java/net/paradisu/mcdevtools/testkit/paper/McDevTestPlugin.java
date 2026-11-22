@@ -24,7 +24,6 @@ import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
-import org.bukkit.command.TabExecutor;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -49,7 +48,7 @@ import java.util.function.Consumer;
  * family instances by mcdev when {@code [test] in_game = true}; configured by system properties:
  * {@code mcdevtools.test.socket}, {@code mcdevtools.test.suites} and {@code mcdevtools.test.results}.
  */
-public final class McDevTestPlugin extends JavaPlugin implements Listener, TabExecutor {
+public final class McDevTestPlugin extends JavaPlugin implements Listener {
     private Path suitesFile;
     private Path resultsDir;
     private ControlServer server;
