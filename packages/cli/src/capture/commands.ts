@@ -205,6 +205,7 @@ const START_OPTIONS = {
   label: { type: 'string' },
   live: { type: 'boolean' },
   watch: { type: 'boolean' },
+  json: { type: 'boolean' },
   hex: { type: 'string' },
   ...FILTER_OPTIONS,
 } as const;
@@ -283,15 +284,20 @@ async function startCommand(ctx: Ctx, args: string[]): Promise<void> {
     }
     throw error;
   }
-  log(`${live ? 'Live session' : `Capture ${id}`} started on ${started.map((i) => i.name).join(', ')}`);
+  if (values.json) {
+    console.log(JSON.stringify({ id, instances: started.map((i) => i.name) }));
+  } else {
+    log(`${live ? 'Live session' : `Capture ${id}`} started on ${started.map((i) => i.name).join(', ')}`);
+  }
   if (rec.watch || live) {
     await watchInstances(ctx, started, { ...values, player: players }, live ? new Map(started.map((i) => [i.name, id])) : new Map());
   }
 }
 
 async function stopCommand(ctx: Ctx, args: string[]): Promise<void> {
-  const { values } = parseArgs({ args, options: { on: { type: 'string', multiple: true } } });
+  const { values } = parseArgs({ args, options: { on: { type: 'string', multiple: true }, json: { type: 'boolean' } } });
   const names = split(values.on);
+  const results: { instance: string; reason: string; packets: number; bytes: number; dropped: number }[] = [];
   const candidates = names.length > 0 ? names.map((name) => instanceNamed(ctx.config, name)) : instancesOf(ctx.config).filter((i) => isRunning(i));
   const rows: string[][] = [];
   const dropped: number[] = [];
@@ -318,11 +324,14 @@ async function stopCommand(ctx: Ctx, args: string[]): Promise<void> {
       outputDir ? formatBytes(sizeOnDisk(join(outputDir, `${instance.name}.bin.gz`))) : 'live only',
     ]);
     dropped.push(result.dropped);
+    results.push({ instance: instance.name, reason: result.reason, packets: result.packets, bytes: result.bytes, dropped: result.dropped });
     if (result.dropped > 0) {
       warnings.push(`${instance.name} dropped ${result.dropped} packets; raise capture.queue_capacity or narrow the capture`);
     }
   }
-  if (rows.length === 0) {
+  if (values.json) {
+    console.log(JSON.stringify({ instances: results }));
+  } else if (rows.length === 0) {
     log('No capture was running.');
   } else {
     const anyDropped = dropped.some((count) => count > 0);
@@ -739,7 +748,7 @@ async function packetCommand(ctx: Ctx, args: string[]): Promise<void> {
 async function exportCommand(ctx: Ctx, args: string[]): Promise<void> {
   const { values, positionals } = parseArgs({
     args,
-    options: { format: { type: 'string' }, instance: { type: 'string' }, out: { type: 'string' }, opt: { type: 'string', multiple: true }, ...FILTER_OPTIONS },
+    options: { format: { type: 'string' }, instance: { type: 'string' }, out: { type: 'string' }, opt: { type: 'string', multiple: true }, json: { type: 'boolean' }, ...FILTER_OPTIONS },
     allowPositionals: true,
   });
   const capture = await captureArg(positionals[0], 'Export which capture?', true);
@@ -778,6 +787,7 @@ async function exportCommand(ctx: Ctx, args: string[]): Promise<void> {
     options[key!] = rest.length > 0 ? rest.join('=') : true;
   }
   const outDir = values.out ?? join(capture.dir, 'export', format.name);
+  const files: string[] = [];
   for (const name of names) {
     const { file, instance, conns, startEpochMs } = await openDump(ctx, capture, name);
     const receiver = (conn: ConnMeta, dir: number) => receiverOf(ctx.config, instance, conn, dir);
@@ -793,7 +803,17 @@ async function exportCommand(ctx: Ctx, args: string[]): Promise<void> {
       outDir,
       options,
     });
-    printExport(name, names.length > 1, lines);
+    if (values.json) {
+      for (const line of lines) {
+        if (line.startsWith('note: ')) warn(line.slice('note: '.length));
+        else files.push(line);
+      }
+    } else {
+      printExport(name, names.length > 1, lines);
+    }
+  }
+  if (values.json) {
+    console.log(JSON.stringify({ id: capture.meta.id, files }));
   }
 }
 
@@ -971,10 +991,11 @@ export const CAPTURE_COMMANDS: Command[] = [
       { flag: '--label <text>', summary: 'Label in the capture id' },
       { flag: '--live', summary: 'Stream without saving' },
       { flag: '--watch', summary: 'Watch packets while recording' },
+      { flag: '--json', summary: 'Print {"id", "instances"} as JSON (for scripts and tests)' },
     ],
     run: startCommand,
   },
-  { name: 'capture stop', usage: '', summary: 'Stop the running captures', options: [{ flag: '--on <names>', summary: 'Instances to use (default: all running)' }], run: stopCommand },
+  { name: 'capture stop', usage: '', summary: 'Stop the running captures', options: [{ flag: '--on <names>', summary: 'Instances to use (default: all running)' }, { flag: '--json', summary: 'Print the result as JSON' }], run: stopCommand },
   { name: 'capture status', usage: '', summary: 'Show capture state and connections', run: statusCommand },
   {
     name: 'capture watch',
@@ -1025,6 +1046,7 @@ export const CAPTURE_COMMANDS: Command[] = [
       { flag: '--out <dir>', summary: 'Output directory' },
       ...FILTER_DOCS,
       { flag: '--opt <key=value>', summary: 'Exporter option' },
+      { flag: '--json', summary: 'Print {"files": [...]} with absolute paths' },
     ],
     run: exportCommand,
   },

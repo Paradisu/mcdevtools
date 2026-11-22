@@ -24,6 +24,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Predicate;
 
 /**
  * The bot's model of an open container (a chest menu, an anvil, the player's own inventory with id 0).
@@ -196,6 +197,31 @@ public final class Screen {
             }
         }
         return true;
+    }
+
+    /**
+     * Waits until the screen satisfies a condition, re-checking after every server update. A click usually causes
+     * several updates, so prefer this to reading slots right after {@code click}.
+     *
+     * @param condition the condition on this screen
+     * @param timeoutMillis how long to wait
+     * @param what what is awaited, for the failure message
+     * @throws AssertionError when the condition did not hold in time; the message describes the screen
+     */
+    public synchronized void await(Predicate<Screen> condition, long timeoutMillis, String what) {
+        long deadline = System.nanoTime() + timeoutMillis * 1_000_000;
+        while (!condition.test(this)) {
+            long left = (deadline - System.nanoTime()) / 1_000_000;
+            if (left <= 0) {
+                throw new AssertionError("Timed out waiting for " + what + "; the screen is:\n" + describe());
+            }
+            try {
+                wait(left);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new AssertionError("Interrupted while waiting for " + what, e);
+            }
+        }
     }
 
     /**

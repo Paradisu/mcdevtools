@@ -4,6 +4,7 @@ import { ensureTestkit } from '../java.ts';
 import { keyValue, next } from '../output.ts';
 import { capture, fail, log } from '../util.ts';
 import { testEnv, writeTestEnv } from './env.ts';
+import { RUN_COMMANDS } from './run.ts';
 
 /** `mcdev test`: the integration test environment, runs, results and reviews. */
 export const TEST_COMMANDS: Command[] = [
@@ -49,4 +50,5 @@ export const TEST_COMMANDS: Command[] = [
       }
     },
   },
+  ...RUN_COMMANDS,
 ];
