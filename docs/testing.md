@@ -131,17 +131,19 @@ Each test records a [packet capture](capture.md) of its instances (needs `[captu
 
 ## Manual tests
 
-For what a person has to judge: write suites as `.mcdevtools/tests/manual/<suite>.toml` (`[test] manual_dir`):
+Write a manual test only when a person has to judge it: how something looks or feels, or what a real client does with it (clicking chat, rendering, sounds, pacing). Anything a bot can check, such as command results, permissions, chat delivery, menus, sync and transfers, belongs in a JUnit test, where it runs on every change; a manual test for it is slower and checks less. If you can write the expected result as an assertion, write the assertion.
+
+Suites are `.mcdevtools/tests/manual/<suite>.toml` (`[test] manual_dir`):
 
 ```toml
-title = "Warps"
+title = "Chat"
 on = "lobby"                       # optional: the instance whose runner is used
 [[tests]]
-id = "warp-menu"
-title = "Warp menu teleports"
+id = "list-click"
+title = "The warp list reads as clickable and a click warps"
 setup = ["lp user {player} permission set paradisu.warp true"]   # console commands; {player} is the tester
-steps = ["Run /warps", "Click the first warp"]
-expect = "You are teleported and see the arrival message"
+steps = ["Run /warps", "Could a new player tell the names can be clicked?", "Click one name"]
+expect = "The names are easy to tell apart, and the click teleports you or says why it cannot"
 cleanup = ["lp user {player} clear"]
 ```
 
