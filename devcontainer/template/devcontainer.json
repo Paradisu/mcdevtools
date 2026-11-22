@@ -5,8 +5,10 @@
     "workspaceFolder": "/workspaces/project",
     "shutdownAction": "stopCompose",
     "remoteUser": "vscode",
-    // The mcdevtools submodule must be checked out before the container starts
-    "initializeCommand": "git submodule update --init --recursive",
+    // The mcdevtools submodule must be checked out before the container starts. This runs on the host every time VS Code
+    // connects, so it only initializes submodules that are missing: a plain `git submodule update` would check out the
+    // commit the project records and silently detach any branch (and uncommitted-to-the-project work) in the submodule.
+    "initializeCommand": "for p in $(git submodule status | sed -n 's/^-[0-9a-f]* \\([^ ]*\\).*/\\1/p'); do git submodule update --init --recursive -- \"$p\"; done",
     // gh and git-over-HTTPS (after `gh auth setup-git`) pick this token up
     "remoteEnv": { "GH_TOKEN": "${localEnv:GH_TOKEN}" },
     "postCreateCommand": "mcdev bootstrap",
